@@ -1,0 +1,685 @@
+name: WebMethods CI/CD
+
+on:
+
+  # =====================================================
+  # Manual execution
+  # =====================================================
+
+  workflow_dispatch:
+
+    inputs:
+
+      targetEnvironment:
+        description: 'Target Environment'
+        required: true
+        type: string
+        default: 'DEV'
+
+      packageName:
+        description: 'IS Package to be deployed'
+        required: true
+        type: string
+        default: 'ThermoDemoPackage1'
+
+      targetISGroupAlias:
+        description: 'Target IS Group Alias'
+        required: true
+        type: string
+        default: 'default'
+
+      buildNumber:
+        description: 'Build Number - leave blank to use GitHub Run Number'
+        required: false
+        type: string
+        default: ''
+
+      hasAdapterPackage:
+        description: 'Deploy Adapter Configuration Package'
+        required: true
+        type: boolean
+        default: false
+
+      adapterConfigPackage:
+        description: 'Adapter Configuration Package'
+        required: false
+        type: string
+        default: ''
+
+      RepoBranchName:
+        description: 'Repository Branch Name'
+        required: true
+        type: string
+        default: 'main'
+
+      executeWmTestSuite:
+        description: 'Execute WebMethods Integration Test Suite'
+        required: true
+        type: boolean
+        default: false
+
+
+  # =====================================================
+  # Automatic execution on main
+  # =====================================================
+
+  push:
+    branches:
+      - main
+
+
+jobs:
+
+  webmethods-cicd:
+
+    name: WebMethods CI/CD
+
+    runs-on: [self-hosted, windows, webmethods]
+
+    env:
+
+      # =====================================================
+      # Java
+      # =====================================================
+
+      JAVA_HOME: 'C:\SoftwareAG11\jvm\jvm'
+
+
+      # =====================================================
+      # WebMethods / ABE
+      # =====================================================
+
+      ABE_HOME: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment'
+
+      ABE_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\bin\build.bat'
+
+
+      # =====================================================
+      # Checkout
+      # =====================================================
+
+      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout'
+
+
+      # =====================================================
+      # ISCCR
+      # =====================================================
+
+      ISCCR_HOME: 'C:\SoftwareAG\tools\CodeReview\ISCCR'
+
+      ISCCR_CMD: 'C:\SoftwareAG\tools\CodeReview\ISCCR\CodeReview.cmd'
+
+      ISCCR_LOG: 'C:\isccr\ISCCR.log'
+
+
+      # =====================================================
+      # Deployer
+      # =====================================================
+
+      DEPLOYER_HOME: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin'
+
+      PROJECT_AUTOMATOR: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\projectAutomator.bat'
+
+      PROJECT_AUTOMATOR_XML: 'C:\SoftwareAG\tools\Deploy\ProjectAutomator.xml'
+
+      DEPLOYER_CMD: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\Deployer.bat'
+
+      DEPLOYER_HOST: 'localhost'
+
+      DEPLOYER_PORT: '5558'
+
+      DEPLOYER_USER: 'Administrator'
+
+
+      # =====================================================
+      # GitHub / Jenkins parameter equivalents
+      # =====================================================
+
+      TARGET_ENVIRONMENT: ${{ inputs.targetEnvironment || 'DEV' }}
+
+      ISPACKAGES_LIST: ${{ inputs.packageName || 'ThermoDemoPackage1' }}
+
+      TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias || 'default' }}
+
+      MAIN_BUILDNUMBER: ${{ inputs.buildNumber || github.run_number }}
+
+      HAS_ADAPTERPKG: ${{ inputs.hasAdapterPackage || false }}
+
+      ADAPTER_CONFIGPKG: ${{ inputs.adapterConfigPackage || '' }}
+
+      REPO_BRANCH_NAME: ${{ inputs.RepoBranchName || github.ref_name }}
+
+      EXECUTE_WMTEST: ${{ inputs.executeWmTestSuite || false }}
+
+
+    steps:
+
+      # =====================================================
+      # 1. Checkout GitHub Repository
+      # =====================================================
+
+      - name: Checkout GitHub Repository
+
+        uses: actions/checkout@v6
+
+        with:
+          clean: true
+
+
+      # =====================================================
+      # 2. Set / Display Environment Variables
+      # =====================================================
+
+      - name: Set Environment Variables
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "WebMethods CI/CD Environment"
+          Write-Host "============================================"
+
+          Write-Host "Repository              : $env:GITHUB_REPOSITORY"
+          Write-Host "Branch                  : $env:GITHUB_REF_NAME"
+          Write-Host "Commit                  : $env:GITHUB_SHA"
+
+          Write-Host ""
+
+          Write-Host "Runner                  : $env:RUNNER_NAME"
+          Write-Host "Computer                : $env:COMPUTERNAME"
+
+          Write-Host ""
+
+          Write-Host "JAVA_HOME               : $env:JAVA_HOME"
+
+          Write-Host "ABE_HOME                : $env:ABE_HOME"
+          Write-Host "ABE_BUILD               : $env:ABE_BUILD"
+
+          Write-Host ""
+
+          Write-Host "CHECKOUT_DIR            : $env:CHECKOUT_DIR"
+
+          Write-Host ""
+
+          Write-Host "ISCCR_HOME              : $env:ISCCR_HOME"
+          Write-Host "ISCCR_CMD               : $env:ISCCR_CMD"
+          Write-Host "ISCCR_LOG               : $env:ISCCR_LOG"
+
+          Write-Host ""
+
+          Write-Host "DEPLOYER_HOME           : $env:DEPLOYER_HOME"
+          Write-Host "PROJECT_AUTOMATOR       : $env:PROJECT_AUTOMATOR"
+          Write-Host "PROJECT_AUTOMATOR_XML   : $env:PROJECT_AUTOMATOR_XML"
+          Write-Host "DEPLOYER_CMD            : $env:DEPLOYER_CMD"
+          Write-Host "DEPLOYER_HOST           : $env:DEPLOYER_HOST"
+          Write-Host "DEPLOYER_PORT           : $env:DEPLOYER_PORT"
+
+          Write-Host ""
+
+          Write-Host "TARGET_ENVIRONMENT      : $env:TARGET_ENVIRONMENT"
+          Write-Host "ISPACKAGES_LIST         : $env:ISPACKAGES_LIST"
+          Write-Host "TARGET_ISGROUP_ALIAS    : $env:TARGET_ISGROUP_ALIAS"
+          Write-Host "MAIN_BUILDNUMBER        : $env:MAIN_BUILDNUMBER"
+          Write-Host "HAS_ADAPTERPKG          : $env:HAS_ADAPTERPKG"
+          Write-Host "ADAPTER_CONFIGPKG       : $env:ADAPTER_CONFIGPKG"
+          Write-Host "REPO_BRANCH_NAME        : $env:REPO_BRANCH_NAME"
+          Write-Host "EXECUTE_WMTEST          : $env:EXECUTE_WMTEST"
+
+
+      # =====================================================
+      # 3. Validate Java
+      # =====================================================
+
+      - name: Validate Java
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo Java Validation
+          echo ============================================
+
+          echo JAVA_HOME=%JAVA_HOME%
+
+          if not exist "%JAVA_HOME%\bin\java.exe" (
+              echo ERROR: Java executable not found.
+              exit /b 1
+          )
+
+          "%JAVA_HOME%\bin\java.exe" -version
+
+          if errorlevel 1 (
+              echo ERROR: Java validation failed.
+              exit /b 1
+          )
+
+          echo Java validation successful.
+
+
+      # =====================================================
+      # 4. Prepare WebMethods Checkout Directory
+      # =====================================================
+
+      - name: Prepare WebMethods Checkout Directory
+
+        shell: powershell
+
+        run: |
+
+          $source = $env:GITHUB_WORKSPACE
+
+          $destination = $env:CHECKOUT_DIR
+
+          Write-Host "============================================"
+          Write-Host "Preparing WebMethods Checkout Directory"
+          Write-Host "============================================"
+
+          Write-Host "Source      : $source"
+
+          Write-Host "Destination : $destination"
+
+
+          if (-not (Test-Path -LiteralPath $destination)) {
+
+              Write-Host "Creating checkout directory..."
+
+              New-Item `
+                -ItemType Directory `
+                -Path $destination `
+                -Force | Out-Null
+          }
+
+
+          Write-Host "Cleaning previous checkout..."
+
+          Get-ChildItem `
+            -LiteralPath $destination `
+            -Force |
+            Remove-Item `
+              -Recurse `
+              -Force `
+              -ErrorAction Stop
+
+
+          Write-Host "Copying GitHub repository..."
+
+          Get-ChildItem `
+            -LiteralPath $source `
+            -Force |
+            Where-Object {
+                $_.Name -ne ".git"
+            } |
+            Copy-Item `
+              -Destination $destination `
+              -Recurse `
+              -Force `
+              -ErrorAction Stop
+
+
+          Write-Host ""
+
+          Write-Host "Checkout copy completed successfully."
+
+
+      # =====================================================
+      # 5. Verify WebMethods Package
+      # =====================================================
+
+      - name: Verify WebMethods Package
+
+        shell: powershell
+
+        run: |
+
+          $packagePath = Join-Path `
+            $env:CHECKOUT_DIR `
+            $env:ISPACKAGES_LIST
+
+
+          Write-Host "============================================"
+          Write-Host "Package Verification"
+          Write-Host "============================================"
+
+          Write-Host "Package:"
+          Write-Host $packagePath
+
+
+          if (-not (Test-Path -LiteralPath $packagePath)) {
+
+              Write-Error "Package was not found."
+
+              Write-Error $packagePath
+
+              exit 1
+          }
+
+
+          Write-Host ""
+
+          Write-Host "Package found successfully."
+
+
+          Get-ChildItem `
+            -LiteralPath $packagePath `
+            -Recurse `
+            -Force
+
+
+      # =====================================================
+      # 6. ISCCR Code Review
+      #
+      # ISCCR failure is intentionally ignored.
+      # =====================================================
+
+      - name: ISCCR Code Review
+
+        shell: cmd
+
+        continue-on-error: true
+
+        run: |
+
+          echo ============================================
+          echo ISCCR Static Code Review
+          echo ============================================
+
+          echo ISCCR Command:
+          echo %ISCCR_CMD%
+
+
+          if not exist "%ISCCR_CMD%" (
+              echo ERROR: ISCCR command not found.
+              exit /b 1
+          )
+
+
+          echo Executing ISCCR...
+
+          call "%ISCCR_CMD%"
+
+
+          echo ISCCR execution completed.
+
+          echo Pipeline will continue even if ISCCR fails.
+
+
+      # =====================================================
+      # 7. Build
+      #
+      # NOTE:
+      # The Jenkins pipeline uses Ant + build.xml.
+      #
+      # This section is intentionally kept separate from
+      # ABE validation so we can verify the actual build.
+      # =====================================================
+
+      - name: Build
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo WebMethods Build
+          echo ============================================
+
+          echo ABE_HOME=%ABE_HOME%
+
+          echo ABE_BUILD=%ABE_BUILD%
+
+          echo CHECKOUT_DIR=%CHECKOUT_DIR%
+
+          echo TARGET_ENVIRONMENT=%TARGET_ENVIRONMENT%
+
+          echo TARGET_ISGROUP_ALIAS=%TARGET_ISGROUP_ALIAS%
+
+          echo BUILD_NUMBER=%MAIN_BUILDNUMBER%
+
+
+          if not exist "%ABE_BUILD%" (
+
+              echo ERROR: ABE build.bat not found.
+
+              exit /b 1
+          )
+
+
+          echo ABE build.bat found successfully.
+
+
+          echo.
+          echo NOTE:
+          echo The original Jenkins pipeline invokes
+          echo the SAG DevOps Ant build.xml.
+          echo.
+          echo Actual ABE build invocation will be
+          echo enabled after confirming the required
+          echo ABE build parameters.
+
+
+      # =====================================================
+      # 8. Validate Project Automator
+      # =====================================================
+
+      - name: Validate Project Automator
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+
+          Write-Host "Project Automator Validation"
+
+          Write-Host "============================================"
+
+
+          Write-Host "Project Automator:"
+          Write-Host $env:PROJECT_AUTOMATOR
+
+
+          Write-Host "Project Automator XML:"
+          Write-Host $env:PROJECT_AUTOMATOR_XML
+
+
+          if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR)) {
+
+              Write-Error "projectAutomator.bat was not found."
+
+              exit 1
+          }
+
+
+          if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR_XML)) {
+
+              Write-Error "ProjectAutomator.xml was not found."
+
+              exit 1
+          }
+
+
+          Write-Host ""
+
+          Write-Host "Project Automator files found successfully."
+
+
+      # =====================================================
+      # 9. Validate Deployer
+      # =====================================================
+
+      - name: Validate Deployer
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+
+          Write-Host "Deployer Validation"
+
+          Write-Host "============================================"
+
+
+          Write-Host "Deployer:"
+          Write-Host $env:DEPLOYER_CMD
+
+
+          if (-not (Test-Path -LiteralPath $env:DEPLOYER_CMD)) {
+
+              Write-Error "Deployer.bat was not found."
+
+              exit 1
+          }
+
+
+          Write-Host ""
+
+          Write-Host "Deployer.bat found successfully."
+
+
+      # =====================================================
+      # 10. Integration Test Suite
+      # =====================================================
+
+      - name: IntegrationTestSuite Tests
+
+        if: ${{ inputs.executeWmTestSuite == true }}
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo WebMethods Integration Test Suite
+          echo ============================================
+
+          echo CHECKOUT_DIR=%CHECKOUT_DIR%
+
+
+          echo NOTE:
+          echo Actual WM Test Suite execution will be
+          echo enabled after confirming its location
+          echo in the current SoftwareAG installation.
+
+
+      # =====================================================
+      # 11. Upload Integration Test Results
+      # =====================================================
+
+      - name: Upload Integration Test Results
+
+        if: ${{ always() && inputs.executeWmTestSuite == true }}
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: integration-test-results-${{ github.run_number }}
+
+          path: |
+            *.xml
+            **/*.xml
+
+          if-no-files-found: warn
+
+
+      # =====================================================
+      # 12. PostMan Unit Tests
+      # =====================================================
+
+      - name: PostMan Unit Tests
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo PostMan Unit Tests
+          echo ============================================
+
+          echo PostMan Unit Tests
+
+          echo Currently a placeholder,
+          echo same as Jenkins pipeline.
+
+
+      # =====================================================
+      # 13. SonarScanner Code Review
+      # =====================================================
+
+      - name: SonarScanner Code Review
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo SonarScanner Code Review
+          echo ============================================
+
+          echo 3rd party static code review sonarscanner
+
+          echo Currently a placeholder,
+          echo same as Jenkins pipeline.
+
+
+      # =====================================================
+      # 14. JMeter Performance Test
+      # =====================================================
+
+      - name: JMeter Performance Test
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo JMeter Performance Test
+          echo ============================================
+
+          echo jmeterPerformanceTest
+
+          echo Currently a placeholder,
+          echo same as Jenkins pipeline.
+
+
+      # =====================================================
+      # 15. SOAPUI
+      # =====================================================
+
+      - name: SOAPUI Testing
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo SOAPUI Testing
+          echo ============================================
+
+          echo SOAPUI testing
+
+          echo Currently a placeholder,
+          echo same as Jenkins pipeline.
+
+
+      # =====================================================
+      # 16. Send Reports
+      # =====================================================
+
+      - name: Send Reports
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo Send Reports
+          echo ============================================
+
+          echo sagdevops-cicd-sendreports
+
+          echo Currently a placeholder,
+          echo same as Jenkins pipeline.
