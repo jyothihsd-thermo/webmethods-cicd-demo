@@ -97,49 +97,67 @@ jobs:
       # =====================================================
 
       - name: Prepare WebMethods Checkout Directory
-        shell: powershell
-        run: |
+  shell: powershell
+  run: |
 
-          Write-Host "Source      : $env:GITHUB_WORKSPACE"
-          Write-Host "Destination : $env:CHECKOUT_DIR"
+    $source = $env:GITHUB_WORKSPACE
+    $destination = $env:CHECKOUT_DIR
 
-          if (-not (Test-Path $env:CHECKOUT_DIR)) {
+    Write-Host "============================================"
+    Write-Host "Preparing WebMethods Checkout Directory"
+    Write-Host "============================================"
 
-              New-Item `
-                -ItemType Directory `
-                -Path $env:CHECKOUT_DIR `
-                -Force | Out-Null
-          }
+    Write-Host "Source      : $source"
+    Write-Host "Destination : $destination"
 
-          # Remove previous checkout content
-          Get-ChildItem `
-            -Path $env:CHECKOUT_DIR `
-            -Force |
-            Remove-Item `
-            -Recurse `
-            -Force
+    # Create destination if it does not exist
+    if (-not (Test-Path $destination)) {
 
-          # Copy current GitHub checkout
-          robocopy `
-            "$env:GITHUB_WORKSPACE" `
-            "$env:CHECKOUT_DIR" `
-            /E `
-            /XD "$env:GITHUB_WORKSPACE\.git"
+        Write-Host "Creating checkout directory..."
 
-          # Robocopy exit codes 0-7 are successful
-          if ($LASTEXITCODE -gt 7) {
+        New-Item `
+          -ItemType Directory `
+          -Path $destination `
+          -Force | Out-Null
+    }
 
-              Write-Error "Robocopy failed with exit code $LASTEXITCODE"
-              exit $LASTEXITCODE
-          }
+    # Remove previous checkout contents
+    Write-Host "Cleaning previous checkout..."
 
-          Write-Host ""
-          Write-Host "WebMethods checkout completed."
+    Get-ChildItem `
+      -Path $destination `
+      -Force |
+      Remove-Item `
+        -Recurse `
+        -Force `
+        -ErrorAction Stop
 
-          Get-ChildItem `
-            -Path $env:CHECKOUT_DIR `
-            -Force
+    # Copy repository contents
+    Write-Host "Copying GitHub repository..."
 
+    Get-ChildItem `
+      -Path $source `
+      -Force |
+      Where-Object {
+          $_.Name -ne ".git"
+      } |
+      Copy-Item `
+        -Destination $destination `
+        -Recurse `
+        -Force `
+        -ErrorAction Stop
+
+    Write-Host ""
+    Write-Host "============================================"
+    Write-Host "Checkout copy completed successfully"
+    Write-Host "============================================"
+
+    Write-Host ""
+    Write-Host "Contents of WebMethods checkout directory:"
+
+    Get-ChildItem `
+      -Path $destination `
+      -Force
 
       # =====================================================
       # 4. Verify package
