@@ -63,15 +63,12 @@ jobs:
           Write-Host "============================================"
           Write-Host "WebMethods CI/CD"
           Write-Host "============================================"
-
           Write-Host "Repository : $env:GITHUB_REPOSITORY"
           Write-Host "Branch     : $env:GITHUB_REF_NAME"
           Write-Host "Commit     : $env:GITHUB_SHA"
           Write-Host "Runner     : $env:RUNNER_NAME"
           Write-Host "Computer   : $env:COMPUTERNAME"
           Write-Host "Workspace  : $env:GITHUB_WORKSPACE"
-
-
       # =====================================================
       # 3. Prepare WebMethods checkout directory
       # =====================================================
@@ -81,28 +78,19 @@ jobs:
         run: |
           $source = $env:GITHUB_WORKSPACE
           $destination = $env:CHECKOUT_DIR
-
           Write-Host "Source      : $source"
           Write-Host "Destination : $destination"
-
           if (-not (Test-Path -LiteralPath $destination)) {
               New-Item -ItemType Directory -Path $destination -Force | Out-Null
           }
-
           Write-Host "Cleaning checkout directory..."
-
           Get-ChildItem -LiteralPath $destination -Force |
               Remove-Item -Recurse -Force -ErrorAction Stop
-
           Write-Host "Copying repository..."
-
           Get-ChildItem -LiteralPath $source -Force |
               Where-Object { $_.Name -ne ".git" } |
               Copy-Item -Destination $destination -Recurse -Force -ErrorAction Stop
-
           Write-Host "Repository copied successfully."
-
-
       # =====================================================
       # 4. Verify ThermoDemoPackage1
       # =====================================================
@@ -111,20 +99,14 @@ jobs:
         shell: powershell
         run: |
           $packagePath = Join-Path $env:CHECKOUT_DIR "ThermoDemoPackage1"
-
           Write-Host "Checking:"
           Write-Host $packagePath
-
           if (-not (Test-Path -LiteralPath $packagePath)) {
               Write-Error "ThermoDemoPackage1 was not found."
               exit 1
           }
-
           Write-Host "ThermoDemoPackage1 found successfully."
-
           Get-ChildItem -LiteralPath $packagePath -Recurse -Force
-
-
       # =====================================================
       # 5. Validate ABE
       # =====================================================
@@ -134,10 +116,99 @@ jobs:
         run: |
           Write-Host "ABE_HOME  = $env:ABE_HOME"
           Write-Host "ABE_BUILD = $env:ABE_BUILD"
-
           if (-not (Test-Path -LiteralPath $env:ABE_BUILD)) {
               Write-Error "ABE build.bat not found."
               exit 1
           }
-
           Write-Host "ABE build.bat found successfully."
+      # =====================================================
+      # 5. ISCCR Code Review
+      # =====================================================
+
+      - name: ISCCR Code Review
+        shell: cmd
+        run: |
+
+          echo ============================================
+          echo ISCCR Static Code Review
+          echo ============================================
+
+          echo ISCCR Command:
+          echo %ISCCR_CMD%
+
+          call "%ISCCR_CMD%"
+
+          if errorlevel 1 (
+              echo ISCCR command returned an error.
+              exit /b 1
+          )
+
+          echo ISCCR execution completed.
+
+
+      # =====================================================
+      # 6. Evaluate ISCCR Result
+      # =====================================================
+
+      - name: Evaluate ISCCR Result
+        shell: powershell
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "Evaluating ISCCR Result"
+          Write-Host "============================================"
+
+          Write-Host "ISCCR Log:"
+          Write-Host $env:ISCCR_LOG
+
+          if (-not (Test-Path -LiteralPath $env:ISCCR_LOG)) {
+
+              Write-Error "ISCCR log was not found:"
+              Write-Error $env:ISCCR_LOG
+
+              exit 1
+          }
+
+          $logContent = Get-Content `
+            -LiteralPath $env:ISCCR_LOG `
+            -Raw
+
+          Write-Host ""
+          Write-Host "ISCCR log found successfully."
+
+          $pattern = 'CODE REVIEW STATUS - (PASS|WARNING|FAILED)'
+
+          $match = [regex]::Match(
+            $logContent,
+            $pattern
+          )
+
+          if (-not $match.Success) {
+
+              Write-Error "Could not find CODE REVIEW STATUS in ISCCR.log."
+
+              exit 1
+          }
+
+          $status = $match.Groups[1].Value
+
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "ISCCR RESULT: $status"
+          Write-Host "============================================"
+
+          if ($status -eq "FAILED") {
+
+              Write-Error "ISCCR Code Review FAILED."
+              exit 1
+          }
+
+          if ($status -eq "WARNING") {
+
+              Write-Warning "ISCCR Code Review completed with WARNINGS."
+          }
+
+          if ($status -eq "PASS") {
+
+              Write-Host "ISCCR Code Review PASSED successfully."
+          }
