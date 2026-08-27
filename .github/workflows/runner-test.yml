@@ -1,0 +1,48 @@
+name: Self Hosted Runner Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-runner:
+    runs-on: [self-hosted, windows, webmethods]
+
+    steps:
+      - name: Display runner information
+        shell: powershell
+        run: |
+          Write-Host "======================================"
+          Write-Host "GitHub Self-Hosted Runner Test"
+          Write-Host "======================================"
+          Write-Host "Computer Name : $env:COMPUTERNAME"
+          Write-Host "User          : $env:USERNAME"
+          Write-Host "Workspace     : $env:GITHUB_WORKSPACE"
+
+      - name: Check Java
+        shell: cmd
+        run: |
+          echo JAVA_HOME=%JAVA_HOME%
+          java -version
+
+      - name: Check Ant
+        shell: powershell
+        run: |
+          Write-Host "ANT_HOME = $env:ANT_HOME"
+          & "$env:ANT_HOME\bin\ant.bat" -version
+
+      - name: Check WebMethods directories
+        shell: powershell
+        run: |
+          Write-Host "Checking WebMethods environment..."
+
+          Write-Host "C:\webmbuild"
+          Test-Path "C:\webmbuild"
+
+          Write-Host "C:\webmtest"
+          Test-Path "C:\webmtest"
+
+          Write-Host "C:\isccr"
+          Test-Path "C:\isccr"
+
+          Write-Host "C:\devops\sagdevops-cicd"
+          Test-Path "C:\devops\sagdevops-cicd"
