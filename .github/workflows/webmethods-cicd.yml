@@ -1,0 +1,286 @@
+name: WebMethods CI/CD
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+
+jobs:
+
+  webmethods-cicd:
+
+    runs-on: [self-hosted, windows, webmethods]
+
+    env:
+
+      # =====================================================
+      # WebMethods / CI-CD Environment
+      # =====================================================
+
+      JAVA_HOME: 'C:\SoftwareAG11\jvm\jvm'
+
+      ABE_HOME: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment'
+      ABE_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\bin\build.bat'
+
+      CICD_HOME: 'C:\devops\sagdevops-cicd'
+
+      # =====================================================
+      # Checkout
+      # =====================================================
+
+      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout'
+
+      # =====================================================
+      # ISCCR
+      # =====================================================
+
+      ISCCR_HOME: 'C:\SoftwareAG\tools\CodeReview\ISCCR'
+      ISCCR_CMD: 'C:\SoftwareAG\tools\CodeReview\ISCCR\CodeReview.cmd'
+
+      ISCCR_LOG: 'C:\isccr\ISCCR.log'
+
+      # =====================================================
+      # Deployer
+      # =====================================================
+
+      DEPLOYER_HOME: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin'
+
+      PROJECT_AUTOMATOR: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\projectAutomator.bat'
+
+      PROJECT_AUTOMATOR_XML: 'C:\SoftwareAG\tools\Deploy\ProjectAutomator.xml'
+
+      DEPLOYER_CMD: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\Deployer.bat'
+
+      DEPLOYER_HOST: 'localhost'
+      DEPLOYER_PORT: '5558'
+      DEPLOYER_USER: 'Administrator'
+
+
+    steps:
+
+      # =====================================================
+      # 1. Checkout repository
+      # =====================================================
+
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v7
+        with:
+          clean: true
+
+      # =====================================================
+      # 2. Display Git information
+      # =====================================================
+
+      - name: Display Build Information
+        shell: powershell
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "WebMethods CI/CD"
+          Write-Host "============================================"
+
+          Write-Host "Repository : $env:GITHUB_REPOSITORY"
+          Write-Host "Branch     : $env:GITHUB_REF_NAME"
+          Write-Host "Commit     : $env:GITHUB_SHA"
+          Write-Host "Runner     : $env:RUNNER_NAME"
+          Write-Host "Computer   : $env:COMPUTERNAME"
+
+          Write-Host ""
+          Write-Host "GitHub Workspace:"
+          Write-Host "$env:GITHUB_WORKSPACE"
+
+
+      # =====================================================
+      # 3. Copy repository to WebMethods checkout directory
+      # =====================================================
+
+      - name: Prepare WebMethods Checkout Directory
+        shell: powershell
+        run: |
+
+          Write-Host "Source      : $env:GITHUB_WORKSPACE"
+          Write-Host "Destination : $env:CHECKOUT_DIR"
+
+          if (-not (Test-Path $env:CHECKOUT_DIR)) {
+
+              New-Item `
+                -ItemType Directory `
+                -Path $env:CHECKOUT_DIR `
+                -Force | Out-Null
+          }
+
+          # Remove previous checkout content
+          Get-ChildItem `
+            -Path $env:CHECKOUT_DIR `
+            -Force |
+            Remove-Item `
+            -Recurse `
+            -Force
+
+          # Copy current GitHub checkout
+          robocopy `
+            "$env:GITHUB_WORKSPACE" `
+            "$env:CHECKOUT_DIR" `
+            /E `
+            /XD "$env:GITHUB_WORKSPACE\.git"
+
+          # Robocopy exit codes 0-7 are successful
+          if ($LASTEXITCODE -gt 7) {
+
+              Write-Error "Robocopy failed with exit code $LASTEXITCODE"
+              exit $LASTEXITCODE
+          }
+
+          Write-Host ""
+          Write-Host "WebMethods checkout completed."
+
+          Get-ChildItem `
+            -Path $env:CHECKOUT_DIR `
+            -Force
+
+
+      # =====================================================
+      # 4. Verify package
+      # =====================================================
+
+      - name: Verify ThermoDemoPackage1
+        shell: powershell
+        run: |
+
+          $packagePath = Join-Path `
+            $env:CHECKOUT_DIR `
+            "ThermoDemoPackage1"
+
+          Write-Host "Package path:"
+          Write-Host $packagePath
+
+          if (-not (Test-Path $packagePath)) {
+
+              Write-Error "ThermoDemoPackage1 was not found."
+              exit 1
+          }
+
+          Write-Host ""
+          Write-Host "ThermoDemoPackage1 found successfully."
+
+          Get-ChildItem `
+            -Path $packagePath `
+            -Recurse `
+            -Force
+
+
+      # =====================================================
+      # 5. ISCCR Code Review
+      # =====================================================
+
+      - name: ISCCR Code Review
+        shell: cmd
+        run: |
+
+          echo ============================================
+          echo ISCCR Static Code Review
+          echo ============================================
+
+          echo ISCCR Command:
+          echo %ISCCR_CMD%
+
+          call "%ISCCR_CMD%"
+
+          if errorlevel 1 (
+              echo ISCCR command returned an error.
+              exit /b 1
+          )
+
+
+      # =====================================================
+      # 6. Evaluate ISCCR result
+      # =====================================================
+
+      - name: Evaluate ISCCR Result
+        shell: powershell
+        run: |
+
+          Write-Host "ISCCR Log:"
+          Write-Host $env:ISCCR_LOG
+
+          if (-not (Test-Path $env:ISCCR_LOG)) {
+
+              Write-Error "ISCCR log was not found."
+              exit 1
+          }
+
+          $logContent = Get-Content `
+            -Path $env:ISCCR_LOG `
+            -Raw
+
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "ISCCR Result"
+          Write-Host "============================================"
+
+          $pattern = 'CODE REVIEW STATUS - (PASS|WARNING|FAILED)'
+
+          $match = [regex]::Match(
+            $logContent,
+            $pattern
+          )
+
+          if (-not $match.Success) {
+
+              Write-Error "Could not find CODE REVIEW STATUS in ISCCR.log."
+              exit 1
+          }
+
+          $status = $match.Groups[1].Value
+
+          Write-Host "ISCCR Code Review Status: $status"
+
+          if ($status -eq "FAILED") {
+
+              Write-Error "ISCCR Code Review FAILED."
+              Write-Error "Review report at: C:\isccr"
+              exit 1
+          }
+
+          if ($status -eq "WARNING") {
+
+              Write-Warning "ISCCR Code Review completed with WARNINGS."
+              Write-Warning "Review report at: C:\isccr"
+          }
+
+          if ($status -eq "PASS") {
+
+              Write-Host "ISCCR Code Review PASSED successfully."
+          }
+
+
+      # =====================================================
+      # 7. ABE Build - initially validation only
+      # =====================================================
+
+      - name: Validate ABE Build
+        shell: powershell
+        run: |
+
+          Write-Host "ABE_HOME:"
+          Write-Host $env:ABE_HOME
+
+          Write-Host ""
+          Write-Host "ABE Build:"
+          Write-Host $env:ABE_BUILD
+
+          if (-not (Test-Path $env:ABE_BUILD)) {
+
+              Write-Error "ABE build.bat not found."
+              exit 1
+          }
+
+          Write-Host ""
+          Write-Host "ABE build.bat is available."
+
+          Write-Host ""
+          Write-Host "NOTE:"
+          Write-Host "Actual ABE build command will be added"
+          Write-Host "after validating the GitHub checkout and ISCCR."
