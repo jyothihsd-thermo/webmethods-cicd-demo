@@ -5,6 +5,7 @@ on:
   # =========================================================
   # Manual execution
   # =========================================================
+
   workflow_dispatch:
 
     inputs:
@@ -61,6 +62,7 @@ on:
   # =========================================================
   # Automatic execution on main
   # =========================================================
+
   push:
     branches:
       - main
@@ -72,7 +74,10 @@ jobs:
 
     name: WebMethods CI/CD
 
-    # Your configured self-hosted runner
+    # =======================================================
+    # Self-hosted runner
+    # =======================================================
+
     runs-on: [self-hosted, windows, webmethods]
 
 
@@ -169,12 +174,15 @@ jobs:
 
       DEPLOYER_USER: 'Administrator'
 
-      # Use GitHub Secret instead of hard-coding password
-      DEPLOYER_PASSWORD: ${{ secrets.DEPLOYER_PASSWORD }}
+      # =====================================================
+      # POC ONLY - hard-coded password as requested
+      # =====================================================
+
+      DEPLOYER_PASSWORD: 'manage'
 
 
       # -------------------------------------------------------
-      # Deployment Control Center / Project
+      # Deployment
       # -------------------------------------------------------
 
       DEPLOYMENT_CONTROL: 'myDeployment'
@@ -253,6 +261,8 @@ jobs:
           Write-Host "DEPLOYER_HOST        : $env:DEPLOYER_HOST"
           Write-Host "DEPLOYER_PORT        : $env:DEPLOYER_PORT"
           Write-Host "DEPLOYER_USER        : $env:DEPLOYER_USER"
+
+          Write-Host ""
           Write-Host "DEPLOYMENT_CONTROL   : $env:DEPLOYMENT_CONTROL"
           Write-Host "DEPLOYMENT_PROJECT   : $env:DEPLOYMENT_PROJECT"
 
@@ -285,16 +295,20 @@ jobs:
 
           if (-not (Test-Path -LiteralPath $javaExe)) {
 
-              Write-Error "Java executable not found."
+              Write-Error "Java executable not found:"
+              Write-Error $javaExe
+
               exit 1
           }
 
 
           & $javaExe -version
 
+
           if ($LASTEXITCODE -ne 0) {
 
               Write-Error "Java validation failed."
+
               exit $LASTEXITCODE
           }
 
@@ -310,7 +324,7 @@ jobs:
         run: |
 
           Write-Host "============================================"
-          Write-Host "Preparing WebMethods Checkout Directory"
+          Write-Host "Prepare WebMethods Checkout"
           Write-Host "============================================"
 
           $source = $env:GITHUB_WORKSPACE
@@ -339,6 +353,7 @@ jobs:
           Write-Host ""
           Write-Host "Cleaning previous checkout..."
 
+
           Get-ChildItem `
             -LiteralPath $destination `
             -Force |
@@ -350,6 +365,7 @@ jobs:
 
           Write-Host ""
           Write-Host "Copying GitHub repository..."
+
 
           Get-ChildItem `
             -LiteralPath $source `
@@ -365,7 +381,7 @@ jobs:
 
 
           Write-Host ""
-          Write-Host "Checkout completed successfully."
+          Write-Host "Checkout copied successfully."
 
 
       # =======================================================
@@ -397,7 +413,7 @@ jobs:
 
           if (-not (Test-Path -LiteralPath $packagePath)) {
 
-              Write-Error "Package directory not found."
+              Write-Error "WebMethods package was not found."
 
               Write-Host ""
               Write-Host "Available directories:"
@@ -417,8 +433,7 @@ jobs:
       # =======================================================
       # 6. ISCCR Code Review
       #
-      # Requirement:
-      # ISCCR failure should NOT stop pipeline.
+      # ISCCR is informational and will NOT stop the pipeline.
       # =======================================================
 
       - name: ISCCR Code Review
@@ -430,14 +445,15 @@ jobs:
         run: |
 
           echo ============================================
-          echo ISCCR Static Code Review
+          echo ISCCR STATIC CODE REVIEW
           echo ============================================
 
+          echo.
           echo JAVA_HOME:
           echo %JAVA_HOME%
 
           echo.
-          echo ISCCR:
+          echo ISCCR Command:
           echo %ISCCR_CMD%
 
           echo.
@@ -448,17 +464,18 @@ jobs:
           echo Package Directory:
           echo %CHECKOUT_DIR%\%PACKAGE_NAME%
 
-          echo.
-
 
           if not exist "%CHECKOUT_DIR%\%PACKAGE_NAME%" (
 
               echo ERROR: Package directory not found.
+
               exit /b 1
           )
 
 
+          echo.
           echo Running ISCCR...
+
 
           call "%ISCCR_CMD%" ^
             -Dcode.review.pkgname=%PACKAGE_NAME% ^
@@ -480,7 +497,6 @@ jobs:
       # 7. Evaluate ISCCR Result
       #
       # Informational only.
-      # Never fails the pipeline.
       # =======================================================
 
       - name: Evaluate ISCCR Result
@@ -492,14 +508,15 @@ jobs:
         run: |
 
           Write-Host "============================================"
-          Write-Host "ISCCR Result"
+          Write-Host "ISCCR RESULT"
           Write-Host "============================================"
 
 
           if (-not (Test-Path -LiteralPath $env:ISCCR_LOG)) {
 
               Write-Warning "ISCCR log was not found."
-              Write-Warning "ISCCR result evaluation skipped."
+
+              Write-Warning "Skipping ISCCR result evaluation."
 
               exit 0
           }
@@ -532,6 +549,7 @@ jobs:
           $status = $match.Groups[1].Value
 
 
+          Write-Host ""
           Write-Host "ISCCR Code Review Status: $status"
 
 
@@ -550,6 +568,7 @@ jobs:
             "FAILED" {
 
               Write-Warning "ISCCR FAILED."
+
               Write-Warning "Pipeline will continue."
             }
           }
@@ -566,8 +585,9 @@ jobs:
         run: |
 
           Write-Host "============================================"
-          Write-Host "ABE Validation"
+          Write-Host "ABE VALIDATION"
           Write-Host "============================================"
+
 
           Write-Host "ABE_HOME:"
           Write-Host $env:ABE_HOME
@@ -584,6 +604,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $env:ABE_BUILD)) {
 
               Write-Error "ABE build.bat not found."
+
               exit 1
           }
 
@@ -591,6 +612,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $env:ABE_MASTER_BUILD)) {
 
               Write-Error "ABE master build.xml not found."
+
               exit 1
           }
 
@@ -598,33 +620,19 @@ jobs:
           if (-not (Test-Path -LiteralPath "$env:ANT_HOME\bin\ant.bat")) {
 
               Write-Error "Ant executable not found."
+
               exit 1
           }
 
 
           Write-Host ""
-          Write-Host "ABE build.bat       : FOUND"
-          Write-Host "ABE master build.xml: FOUND"
-          Write-Host "Ant                 : FOUND"
+          Write-Host "ABE build.bat        : FOUND"
+          Write-Host "ABE master build.xml : FOUND"
+          Write-Host "Ant                  : FOUND"
 
 
       # =======================================================
-      # 9. ABE BUILD
-      #
-      # Based on your Jenkins Build stage:
-      #
-      # ant
-      # -DtargetISGroupAlias
-      # -DCHECKOUT_DIR
-      # -DtargetEnv
-      # -DSAGHome
-      # -DprojectName
-      # -f build.xml
-      # build
-      #
-      # The build.xml is now your actual:
-      # C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\
-      # master_build\build.xml
+      # 9. ABE Build
       # =======================================================
 
       - name: ABE Build
@@ -669,12 +677,11 @@ jobs:
           echo BUILD_NUMBER:
           echo %MAIN_BUILDNUMBER%
 
-          echo.
-
 
           if not exist "%ANT_HOME%\bin\ant.bat" (
 
-              echo ERROR: Ant not found.
+              echo ERROR: Ant executable not found.
+
               exit /b 1
           )
 
@@ -682,10 +689,12 @@ jobs:
           if not exist "%ABE_MASTER_BUILD%" (
 
               echo ERROR: ABE master build.xml not found.
+
               exit /b 1
           )
 
 
+          echo.
           echo Starting ABE master build...
 
 
@@ -694,7 +703,7 @@ jobs:
             -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
             -DtargetEnv="%TARGET_ENVIRONMENT%" ^
             -DSAGHome="C:\SoftwareAG11_ABE" ^
-            -DprojectName="ThermoDemoPackage1_%MAIN_BUILDNUMBER%" ^
+            -DprojectName="%PACKAGE_NAME%_%MAIN_BUILDNUMBER%" ^
             -f "%ABE_MASTER_BUILD%" ^
             build
 
@@ -703,14 +712,12 @@ jobs:
 
 
           echo.
-          echo ============================================
-          echo ABE EXIT CODE: %ABE_EXIT_CODE%
-          echo ============================================
+          echo ABE Exit Code:
+          echo %ABE_EXIT_CODE%
 
 
           if not "%ABE_EXIT_CODE%"=="0" (
 
-              echo.
               echo ERROR: ABE Build FAILED.
 
               exit /b %ABE_EXIT_CODE%
@@ -732,13 +739,21 @@ jobs:
         run: |
 
           Write-Host "============================================"
-          Write-Host "Project Automator Validation"
+          Write-Host "PROJECT AUTOMATOR VALIDATION"
           Write-Host "============================================"
+
+
+          Write-Host "Project Automator:"
+          Write-Host $env:PROJECT_AUTOMATOR
+
+          Write-Host ""
+          Write-Host "Project XML:"
+          Write-Host $env:PROJECT_AUTOMATOR_XML
 
 
           if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR)) {
 
-              Write-Error "Project Automator not found."
+              Write-Error "ProjectAutomator.bat not found."
 
               exit 1
           }
@@ -752,8 +767,8 @@ jobs:
           }
 
 
-          Write-Host "Project Automator : FOUND"
-          Write-Host "Project XML       : FOUND"
+          Write-Host ""
+          Write-Host "Project Automator files found."
 
 
       # =======================================================
@@ -779,7 +794,7 @@ jobs:
           echo %PROJECT_AUTOMATOR_XML%
 
           echo.
-          echo Executing Project Automator...
+          echo Creating deployment project...
 
 
           call "%PROJECT_AUTOMATOR%" "%PROJECT_AUTOMATOR_XML%"
@@ -803,13 +818,13 @@ jobs:
 
 
           echo.
-          echo Project Automator completed successfully.
+          echo Deployment project creation completed successfully.
 
 
       # =======================================================
       # 12. Variable Substitution
       #
-      # The current Jenkins stage only contains an echo.
+      # Current Jenkins implementation is only an echo.
       # =======================================================
 
       - name: Variable Substitution
@@ -836,9 +851,8 @@ jobs:
         run: |
 
           Write-Host "============================================"
-          Write-Host "Deployer Validation"
+          Write-Host "DEPLOYER VALIDATION"
           Write-Host "============================================"
-
 
           Write-Host "Deployer:"
           Write-Host $env:DEPLOYER_CMD
@@ -866,10 +880,6 @@ jobs:
 
       # =======================================================
       # 14. Deploy
-      #
-      # Password is supplied through GitHub Secret:
-      #
-      # DEPLOYER_PASSWORD
       # =======================================================
 
       - name: Deploy
@@ -887,11 +897,11 @@ jobs:
           echo %DEPLOYER_CMD%
 
           echo.
-          echo Server:
+          echo Deployment Server:
           echo %DEPLOYER_HOST%:%DEPLOYER_PORT%
 
           echo.
-          echo User:
+          echo Deployment User:
           echo %DEPLOYER_USER%
 
           echo.
@@ -910,7 +920,7 @@ jobs:
           if "%DEPLOYER_PASSWORD%"=="" (
 
               echo.
-              echo ERROR: DEPLOYER_PASSWORD secret is not configured.
+              echo ERROR: Deployer password is empty.
 
               exit /b 1
           )
@@ -935,9 +945,8 @@ jobs:
 
 
           echo.
-          echo ============================================
-          echo DEPLOYER EXIT CODE: %DEPLOYER_EXIT_CODE%
-          echo ============================================
+          echo Deployer Exit Code:
+          echo %DEPLOYER_EXIT_CODE%
 
 
           if not "%DEPLOYER_EXIT_CODE%"=="0" (
@@ -955,9 +964,6 @@ jobs:
 
       # =======================================================
       # 15. Adapter Configuration
-      #
-      # Jenkins runs this only when HAS_ADAPTERPKG=true.
-      # The old Jenkins pipeline invokes another Jenkins job.
       # =======================================================
 
       - name: Deploy Adapter Configuration
@@ -976,7 +982,7 @@ jobs:
           Write-Host $env:TARGET_ISGROUP_ALIAS
 
           Write-Host ""
-          Write-Host "Adapter Package:"
+          Write-Host "Adapter Config Package:"
           Write-Host $env:ADAPTER_CONFIGPKG
 
           Write-Host ""
@@ -986,28 +992,15 @@ jobs:
           Write-Host ""
           Write-Host "Adapter configuration is enabled."
 
-          Write-Host ""
-          Write-Host "NOTE:"
-          Write-Host "The original Jenkins pipeline invokes the"
-          Write-Host "sagdevops-cicd-checkout-adaptersconfig"
-          Write-Host "downstream Jenkins job."
+          Write-Warning "The original Jenkins pipeline invokes a"
+          Write-Warning "separate downstream adapter configuration job."
 
-          Write-Host ""
-          Write-Host "This downstream job must be migrated separately"
-          Write-Host "to GitHub Actions."
+          Write-Warning "That downstream job still needs to be"
+          Write-Warning "migrated to GitHub Actions."
 
 
       # =======================================================
       # 16. Integration Test Suite
-      #
-      # Enabled only when executeWmTestSuite=true.
-      #
-      # Your original Jenkins path referenced:
-      # CICD_HOME/cicd/scripts/wmtestsuite/buildTest.xml
-      #
-      # That file does not exist in the runner path we
-      # previously checked, so this remains a controlled
-      # placeholder until its actual location is provided.
       # =======================================================
 
       - name: Integration Test Suite
@@ -1022,19 +1015,17 @@ jobs:
           Write-Host "INTEGRATION TEST SUITE"
           Write-Host "============================================"
 
-          Write-Host ""
           Write-Host "Checkout Directory:"
           Write-Host $env:CHECKOUT_DIR
 
           Write-Host ""
-          Write-Host "WM Test Suite requested."
+          Write-Host "WM Test Suite execution requested."
 
-          Write-Warning "The original Jenkins buildTest.xml location"
-          Write-Warning "is not currently present under the configured"
-          Write-Warning "runner paths."
+          Write-Warning "The original Jenkins buildTest.xml path"
+          Write-Warning "is not available in the currently confirmed"
+          Write-Warning "runner installation."
 
-          Write-Warning "WM Test execution will be enabled once the"
-          Write-Warning "actual buildTest.xml path is confirmed."
+          Write-Warning "Test execution is therefore not enabled yet."
 
 
       # =======================================================
@@ -1059,7 +1050,7 @@ jobs:
 
 
       # =======================================================
-      # 18. Postman
+      # 18. Postman Unit Tests
       # =======================================================
 
       - name: Postman Unit Tests
@@ -1146,7 +1137,7 @@ jobs:
 
 
       # =======================================================
-      # 23. Final Environment Summary
+      # 23. Final Summary
       # =======================================================
 
       - name: Environment Summary
@@ -1200,5 +1191,5 @@ jobs:
 
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "Pipeline finished"
+          Write-Host "Pipeline execution finished"
           Write-Host "============================================"
