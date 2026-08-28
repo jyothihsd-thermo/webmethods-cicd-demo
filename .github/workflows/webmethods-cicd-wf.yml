@@ -2,67 +2,65 @@ name: WebMethods CI/CD
 
 on:
 
-  # =====================================================
+  # =========================================================
   # Manual execution
-  # =====================================================
-
+  # =========================================================
   workflow_dispatch:
 
     inputs:
 
       targetEnvironment:
-        description: 'Target Environment'
+        description: "Target Environment"
         required: true
         type: string
-        default: 'DEV'
+        default: "DEV"
 
       packageName:
-        description: 'IS Package to be deployed'
+        description: "WebMethods Package Name"
         required: true
         type: string
-        default: 'ThermoDemoPackage1'
+        default: "ThermoDemoPackage1"
 
       targetISGroupAlias:
-        description: 'Target IS Group Alias'
+        description: "Target IS Group Alias"
         required: true
         type: string
-        default: 'default'
+        default: "default"
 
       buildNumber:
-        description: 'Build Number - leave blank to use GitHub Run Number'
+        description: "Build Number"
         required: false
         type: string
-        default: ''
+        default: ""
 
       hasAdapterPackage:
-        description: 'Deploy Adapter Configuration Package'
+        description: "Has Adapter Configuration Package"
         required: true
         type: boolean
         default: false
 
       adapterConfigPackage:
-        description: 'Adapter Configuration Package'
+        description: "Adapter Configuration Package"
         required: false
         type: string
-        default: ''
+        default: ""
 
       RepoBranchName:
-        description: 'Repository Branch Name'
+        description: "Repository Branch Name"
         required: true
         type: string
-        default: 'main'
+        default: "main"
 
       executeWmTestSuite:
-        description: 'Execute WebMethods Integration Test Suite'
+        description: "Execute WebMethods Integration Test Suite"
         required: true
         type: boolean
         default: false
 
 
-  # =====================================================
+  # =========================================================
   # Automatic execution on main
-  # =====================================================
-
+  # =========================================================
   push:
     branches:
       - main
@@ -74,70 +72,23 @@ jobs:
 
     name: WebMethods CI/CD
 
+    # Your configured self-hosted runner
     runs-on: [self-hosted, windows, webmethods]
+
+
+    # =======================================================
+    # Environment
+    # =======================================================
 
     env:
 
-      # =====================================================
-      # Java
-      # =====================================================
-
-      JAVA_HOME: 'C:\SoftwareAG11\jvm\jvm'
-
-
-      # =====================================================
-      # WebMethods / ABE
-      # =====================================================
-
-      ABE_HOME: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment'
-
-      ABE_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\bin\build.bat'
-
-
-      # =====================================================
-      # Checkout
-      # =====================================================
-
-      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout'
-
-
-      # =====================================================
-      # ISCCR
-      # =====================================================
-
-      ISCCR_HOME: 'C:\SoftwareAG\tools\CodeReview\ISCCR'
-
-      ISCCR_CMD: 'C:\SoftwareAG\tools\CodeReview\ISCCR\CodeReview.cmd'
-
-      ISCCR_LOG: 'C:\isccr\ISCCR.log'
-
-
-      # =====================================================
-      # Deployer
-      # =====================================================
-
-      DEPLOYER_HOME: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin'
-
-      PROJECT_AUTOMATOR: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\projectAutomator.bat'
-
-      PROJECT_AUTOMATOR_XML: 'C:\SoftwareAG\tools\Deploy\ProjectAutomator.xml'
-
-      DEPLOYER_CMD: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\Deployer.bat'
-
-      DEPLOYER_HOST: 'localhost'
-
-      DEPLOYER_PORT: '5558'
-
-      DEPLOYER_USER: 'Administrator'
-
-
-      # =====================================================
+      # -------------------------------------------------------
       # GitHub / Jenkins parameter equivalents
-      # =====================================================
+      # -------------------------------------------------------
+
+      PACKAGE_NAME: ${{ inputs.packageName || 'ThermoDemoPackage1' }}
 
       TARGET_ENVIRONMENT: ${{ inputs.targetEnvironment || 'DEV' }}
-
-      ISPACKAGES_LIST: ${{ inputs.packageName || 'ThermoDemoPackage1' }}
 
       TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias || 'default' }}
 
@@ -152,23 +103,103 @@ jobs:
       EXECUTE_WMTEST: ${{ inputs.executeWmTestSuite || false }}
 
 
+      # -------------------------------------------------------
+      # Java
+      # -------------------------------------------------------
+
+      JAVA_HOME: 'C:\SoftwareAG11\jvm\jvm'
+
+
+      # -------------------------------------------------------
+      # Ant
+      # -------------------------------------------------------
+
+      ANT_HOME: 'C:\SoftwareAG11_ABE\common\lib\ant'
+
+
+      # -------------------------------------------------------
+      # ABE
+      # -------------------------------------------------------
+
+      ABE_HOME: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment'
+
+      ABE_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\bin\build.bat'
+
+      ABE_MASTER_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\master_build\build.xml'
+
+
+      # -------------------------------------------------------
+      # WebMethods checkout
+      # -------------------------------------------------------
+
+      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout'
+
+
+      # -------------------------------------------------------
+      # ISCCR
+      # -------------------------------------------------------
+
+      ISCCR_HOME: 'C:\SoftwareAG\tools\CodeReview\ISCCR'
+
+      ISCCR_CMD: 'C:\SoftwareAG\tools\CodeReview\ISCCR\CodeReview.cmd'
+
+      ISCCR_LOG: 'C:\isccr\ISCCR.log'
+
+
+      # -------------------------------------------------------
+      # Project Automator
+      # -------------------------------------------------------
+
+      PROJECT_AUTOMATOR: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\projectAutomator.bat'
+
+      PROJECT_AUTOMATOR_XML: 'C:\SoftwareAG\tools\Deploy\ProjectAutomator.xml'
+
+
+      # -------------------------------------------------------
+      # Deployer
+      # -------------------------------------------------------
+
+      DEPLOYER_HOME: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin'
+
+      DEPLOYER_CMD: 'C:\SoftwareAG11_ABE\IntegrationServer\instances\default\packages\WmDeployer\bin\Deployer.bat'
+
+      DEPLOYER_HOST: 'localhost'
+
+      DEPLOYER_PORT: '5558'
+
+      DEPLOYER_USER: 'Administrator'
+
+      # Use GitHub Secret instead of hard-coding password
+      DEPLOYER_PASSWORD: ${{ secrets.DEPLOYER_PASSWORD }}
+
+
+      # -------------------------------------------------------
+      # Deployment Control Center / Project
+      # -------------------------------------------------------
+
+      DEPLOYMENT_CONTROL: 'myDeployment'
+
+      DEPLOYMENT_PROJECT: 'MyFirstCICD_Deploy1MyFirstCICD_Deploy1'
+
+
     steps:
 
-      # =====================================================
+
+      # =======================================================
       # 1. Checkout GitHub Repository
-      # =====================================================
+      # =======================================================
 
       - name: Checkout GitHub Repository
 
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
         with:
           clean: true
 
 
-      # =====================================================
-      # 2. Set / Display Environment Variables
-      # =====================================================
+      # =======================================================
+      # 2. Display Build Information
+      # =======================================================
 
       - name: Set Environment Variables
 
@@ -177,90 +208,100 @@ jobs:
         run: |
 
           Write-Host "============================================"
-          Write-Host "WebMethods CI/CD Environment"
+          Write-Host "WebMethods CI/CD"
           Write-Host "============================================"
 
-          Write-Host "Repository              : $env:GITHUB_REPOSITORY"
-          Write-Host "Branch                  : $env:GITHUB_REF_NAME"
-          Write-Host "Commit                  : $env:GITHUB_SHA"
+          Write-Host ""
+          Write-Host "Repository          : $env:GITHUB_REPOSITORY"
+          Write-Host "Branch              : $env:GITHUB_REF_NAME"
+          Write-Host "Commit              : $env:GITHUB_SHA"
+          Write-Host "Workflow            : $env:GITHUB_WORKFLOW"
+          Write-Host "Run Number          : $env:GITHUB_RUN_NUMBER"
+          Write-Host "Runner              : $env:RUNNER_NAME"
+          Write-Host "Computer            : $env:COMPUTERNAME"
 
           Write-Host ""
-
-          Write-Host "Runner                  : $env:RUNNER_NAME"
-          Write-Host "Computer                : $env:COMPUTERNAME"
-
-          Write-Host ""
-
-          Write-Host "JAVA_HOME               : $env:JAVA_HOME"
-
-          Write-Host "ABE_HOME                : $env:ABE_HOME"
-          Write-Host "ABE_BUILD               : $env:ABE_BUILD"
+          Write-Host "Package             : $env:PACKAGE_NAME"
+          Write-Host "Target Environment  : $env:TARGET_ENVIRONMENT"
+          Write-Host "Target IS Group     : $env:TARGET_ISGROUP_ALIAS"
+          Write-Host "Build Number        : $env:MAIN_BUILDNUMBER"
+          Write-Host "Has Adapter Package : $env:HAS_ADAPTERPKG"
+          Write-Host "Adapter Config      : $env:ADAPTER_CONFIGPKG"
+          Write-Host "Repo Branch         : $env:REPO_BRANCH_NAME"
+          Write-Host "Execute WM Tests    : $env:EXECUTE_WMTEST"
 
           Write-Host ""
-
-          Write-Host "CHECKOUT_DIR            : $env:CHECKOUT_DIR"
-
-          Write-Host ""
-
-          Write-Host "ISCCR_HOME              : $env:ISCCR_HOME"
-          Write-Host "ISCCR_CMD               : $env:ISCCR_CMD"
-          Write-Host "ISCCR_LOG               : $env:ISCCR_LOG"
+          Write-Host "JAVA_HOME            : $env:JAVA_HOME"
+          Write-Host "ANT_HOME             : $env:ANT_HOME"
+          Write-Host "ABE_HOME             : $env:ABE_HOME"
+          Write-Host "ABE_BUILD            : $env:ABE_BUILD"
+          Write-Host "ABE_MASTER_BUILD     : $env:ABE_MASTER_BUILD"
 
           Write-Host ""
-
-          Write-Host "DEPLOYER_HOME           : $env:DEPLOYER_HOME"
-          Write-Host "PROJECT_AUTOMATOR       : $env:PROJECT_AUTOMATOR"
-          Write-Host "PROJECT_AUTOMATOR_XML   : $env:PROJECT_AUTOMATOR_XML"
-          Write-Host "DEPLOYER_CMD            : $env:DEPLOYER_CMD"
-          Write-Host "DEPLOYER_HOST           : $env:DEPLOYER_HOST"
-          Write-Host "DEPLOYER_PORT           : $env:DEPLOYER_PORT"
+          Write-Host "CHECKOUT_DIR         : $env:CHECKOUT_DIR"
 
           Write-Host ""
+          Write-Host "ISCCR_HOME           : $env:ISCCR_HOME"
+          Write-Host "ISCCR_CMD            : $env:ISCCR_CMD"
 
-          Write-Host "TARGET_ENVIRONMENT      : $env:TARGET_ENVIRONMENT"
-          Write-Host "ISPACKAGES_LIST         : $env:ISPACKAGES_LIST"
-          Write-Host "TARGET_ISGROUP_ALIAS    : $env:TARGET_ISGROUP_ALIAS"
-          Write-Host "MAIN_BUILDNUMBER        : $env:MAIN_BUILDNUMBER"
-          Write-Host "HAS_ADAPTERPKG          : $env:HAS_ADAPTERPKG"
-          Write-Host "ADAPTER_CONFIGPKG       : $env:ADAPTER_CONFIGPKG"
-          Write-Host "REPO_BRANCH_NAME        : $env:REPO_BRANCH_NAME"
-          Write-Host "EXECUTE_WMTEST          : $env:EXECUTE_WMTEST"
+          Write-Host ""
+          Write-Host "PROJECT_AUTOMATOR    : $env:PROJECT_AUTOMATOR"
+          Write-Host "PROJECT_AUTOMATOR_XML: $env:PROJECT_AUTOMATOR_XML"
+
+          Write-Host ""
+          Write-Host "DEPLOYER_CMD         : $env:DEPLOYER_CMD"
+          Write-Host "DEPLOYER_HOST        : $env:DEPLOYER_HOST"
+          Write-Host "DEPLOYER_PORT        : $env:DEPLOYER_PORT"
+          Write-Host "DEPLOYER_USER        : $env:DEPLOYER_USER"
+          Write-Host "DEPLOYMENT_CONTROL   : $env:DEPLOYMENT_CONTROL"
+          Write-Host "DEPLOYMENT_PROJECT   : $env:DEPLOYMENT_PROJECT"
 
 
-      # =====================================================
+      # =======================================================
       # 3. Validate Java
-      # =====================================================
+      # =======================================================
 
       - name: Validate Java
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ============================================
-          echo Java Validation
-          echo ============================================
+          Write-Host "============================================"
+          Write-Host "Java Validation"
+          Write-Host "============================================"
 
-          echo JAVA_HOME=%JAVA_HOME%
+          $javaExe = Join-Path `
+            $env:JAVA_HOME `
+            "bin\java.exe"
 
-          if not exist "%JAVA_HOME%\bin\java.exe" (
-              echo ERROR: Java executable not found.
-              exit /b 1
-          )
+          Write-Host "JAVA_HOME:"
+          Write-Host $env:JAVA_HOME
 
-          "%JAVA_HOME%\bin\java.exe" -version
-
-          if errorlevel 1 (
-              echo ERROR: Java validation failed.
-              exit /b 1
-          )
-
-          echo Java validation successful.
+          Write-Host ""
+          Write-Host "Java executable:"
+          Write-Host $javaExe
 
 
-      # =====================================================
+          if (-not (Test-Path -LiteralPath $javaExe)) {
+
+              Write-Error "Java executable not found."
+              exit 1
+          }
+
+
+          & $javaExe -version
+
+          if ($LASTEXITCODE -ne 0) {
+
+              Write-Error "Java validation failed."
+              exit $LASTEXITCODE
+          }
+
+
+      # =======================================================
       # 4. Prepare WebMethods Checkout Directory
-      # =====================================================
+      # =======================================================
 
       - name: Prepare WebMethods Checkout Directory
 
@@ -268,21 +309,24 @@ jobs:
 
         run: |
 
-          $source = $env:GITHUB_WORKSPACE
-
-          $destination = $env:CHECKOUT_DIR
-
           Write-Host "============================================"
           Write-Host "Preparing WebMethods Checkout Directory"
           Write-Host "============================================"
 
-          Write-Host "Source      : $source"
+          $source = $env:GITHUB_WORKSPACE
+          $destination = $env:CHECKOUT_DIR
 
-          Write-Host "Destination : $destination"
+          Write-Host "Source:"
+          Write-Host $source
+
+          Write-Host ""
+          Write-Host "Destination:"
+          Write-Host $destination
 
 
           if (-not (Test-Path -LiteralPath $destination)) {
 
+              Write-Host ""
               Write-Host "Creating checkout directory..."
 
               New-Item `
@@ -292,6 +336,7 @@ jobs:
           }
 
 
+          Write-Host ""
           Write-Host "Cleaning previous checkout..."
 
           Get-ChildItem `
@@ -303,13 +348,14 @@ jobs:
               -ErrorAction Stop
 
 
+          Write-Host ""
           Write-Host "Copying GitHub repository..."
 
           Get-ChildItem `
             -LiteralPath $source `
             -Force |
             Where-Object {
-                $_.Name -ne ".git"
+              $_.Name -ne ".git"
             } |
             Copy-Item `
               -Destination $destination `
@@ -319,13 +365,12 @@ jobs:
 
 
           Write-Host ""
+          Write-Host "Checkout completed successfully."
 
-          Write-Host "Checkout copy completed successfully."
 
-
-      # =====================================================
+      # =======================================================
       # 5. Verify WebMethods Package
-      # =====================================================
+      # =======================================================
 
       - name: Verify WebMethods Package
 
@@ -333,45 +378,48 @@ jobs:
 
         run: |
 
-          $packagePath = Join-Path `
-            $env:CHECKOUT_DIR `
-            $env:ISPACKAGES_LIST
-
-
           Write-Host "============================================"
           Write-Host "Package Verification"
           Write-Host "============================================"
 
+          $packagePath = Join-Path `
+            $env:CHECKOUT_DIR `
+            $env:PACKAGE_NAME
+
+
           Write-Host "Package:"
+          Write-Host $env:PACKAGE_NAME
+
+          Write-Host ""
+          Write-Host "Package Path:"
           Write-Host $packagePath
 
 
           if (-not (Test-Path -LiteralPath $packagePath)) {
 
-              Write-Error "Package was not found."
+              Write-Error "Package directory not found."
 
-              Write-Error $packagePath
+              Write-Host ""
+              Write-Host "Available directories:"
+
+              Get-ChildItem `
+                -LiteralPath $env:CHECKOUT_DIR `
+                -Directory
 
               exit 1
           }
 
 
           Write-Host ""
-
           Write-Host "Package found successfully."
 
 
-          Get-ChildItem `
-            -LiteralPath $packagePath `
-            -Recurse `
-            -Force
-
-
-      # =====================================================
+      # =======================================================
       # 6. ISCCR Code Review
       #
-      # ISCCR failure is intentionally ignored.
-      # =====================================================
+      # Requirement:
+      # ISCCR failure should NOT stop pipeline.
+      # =======================================================
 
       - name: ISCCR Code Review
 
@@ -385,83 +433,297 @@ jobs:
           echo ISCCR Static Code Review
           echo ============================================
 
-          echo ISCCR Command:
+          echo JAVA_HOME:
+          echo %JAVA_HOME%
+
+          echo.
+          echo ISCCR:
           echo %ISCCR_CMD%
 
+          echo.
+          echo Package:
+          echo %PACKAGE_NAME%
 
-          if not exist "%ISCCR_CMD%" (
-              echo ERROR: ISCCR command not found.
+          echo.
+          echo Package Directory:
+          echo %CHECKOUT_DIR%\%PACKAGE_NAME%
+
+          echo.
+
+
+          if not exist "%CHECKOUT_DIR%\%PACKAGE_NAME%" (
+
+              echo ERROR: Package directory not found.
               exit /b 1
           )
 
 
-          echo Executing ISCCR...
+          echo Running ISCCR...
 
-          call "%ISCCR_CMD%"
+          call "%ISCCR_CMD%" ^
+            -Dcode.review.pkgname=%PACKAGE_NAME% ^
+            -Dcode.review.pkgprefix=Thermo ^
+            -Dcode.review.folder-prefix=Thermo ^
+            -Dcode.review.directory="%CHECKOUT_DIR%\%PACKAGE_NAME%"
 
 
+          echo.
+          echo ISCCR Exit Code: %ERRORLEVEL%
+
+          echo.
           echo ISCCR execution completed.
 
           echo Pipeline will continue even if ISCCR fails.
 
 
-      # =====================================================
-      # 7. Build
+      # =======================================================
+      # 7. Evaluate ISCCR Result
       #
-      # NOTE:
-      # The Jenkins pipeline uses Ant + build.xml.
-      #
-      # This section is intentionally kept separate from
-      # ABE validation so we can verify the actual build.
-      # =====================================================
+      # Informational only.
+      # Never fails the pipeline.
+      # =======================================================
 
-      - name: Build
+      - name: Evaluate ISCCR Result
+
+        if: always()
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "ISCCR Result"
+          Write-Host "============================================"
+
+
+          if (-not (Test-Path -LiteralPath $env:ISCCR_LOG)) {
+
+              Write-Warning "ISCCR log was not found."
+              Write-Warning "ISCCR result evaluation skipped."
+
+              exit 0
+          }
+
+
+          $logContent = Get-Content `
+            -LiteralPath $env:ISCCR_LOG `
+            -Raw
+
+
+          $pattern = 'CODE REVIEW STATUS - (PASS|WARNING|FAILED)'
+
+
+          $match = [regex]::Match(
+            $logContent,
+            $pattern
+          )
+
+
+          if (-not $match.Success) {
+
+              Write-Warning "CODE REVIEW STATUS was not found."
+
+              Write-Warning "Pipeline will continue."
+
+              exit 0
+          }
+
+
+          $status = $match.Groups[1].Value
+
+
+          Write-Host "ISCCR Code Review Status: $status"
+
+
+          switch ($status) {
+
+            "PASS" {
+
+              Write-Host "ISCCR PASSED."
+            }
+
+            "WARNING" {
+
+              Write-Warning "ISCCR completed with WARNINGS."
+            }
+
+            "FAILED" {
+
+              Write-Warning "ISCCR FAILED."
+              Write-Warning "Pipeline will continue."
+            }
+          }
+
+
+      # =======================================================
+      # 8. Validate ABE
+      # =======================================================
+
+      - name: Validate ABE
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "ABE Validation"
+          Write-Host "============================================"
+
+          Write-Host "ABE_HOME:"
+          Write-Host $env:ABE_HOME
+
+          Write-Host ""
+          Write-Host "ABE_BUILD:"
+          Write-Host $env:ABE_BUILD
+
+          Write-Host ""
+          Write-Host "ABE_MASTER_BUILD:"
+          Write-Host $env:ABE_MASTER_BUILD
+
+
+          if (-not (Test-Path -LiteralPath $env:ABE_BUILD)) {
+
+              Write-Error "ABE build.bat not found."
+              exit 1
+          }
+
+
+          if (-not (Test-Path -LiteralPath $env:ABE_MASTER_BUILD)) {
+
+              Write-Error "ABE master build.xml not found."
+              exit 1
+          }
+
+
+          if (-not (Test-Path -LiteralPath "$env:ANT_HOME\bin\ant.bat")) {
+
+              Write-Error "Ant executable not found."
+              exit 1
+          }
+
+
+          Write-Host ""
+          Write-Host "ABE build.bat       : FOUND"
+          Write-Host "ABE master build.xml: FOUND"
+          Write-Host "Ant                 : FOUND"
+
+
+      # =======================================================
+      # 9. ABE BUILD
+      #
+      # Based on your Jenkins Build stage:
+      #
+      # ant
+      # -DtargetISGroupAlias
+      # -DCHECKOUT_DIR
+      # -DtargetEnv
+      # -DSAGHome
+      # -DprojectName
+      # -f build.xml
+      # build
+      #
+      # The build.xml is now your actual:
+      # C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\
+      # master_build\build.xml
+      # =======================================================
+
+      - name: ABE Build
 
         shell: cmd
 
         run: |
 
           echo ============================================
-          echo WebMethods Build
+          echo ABE BUILD
           echo ============================================
 
-          echo ABE_HOME=%ABE_HOME%
+          echo.
+          echo ANT_HOME:
+          echo %ANT_HOME%
 
-          echo ABE_BUILD=%ABE_BUILD%
+          echo.
+          echo ABE_HOME:
+          echo %ABE_HOME%
 
-          echo CHECKOUT_DIR=%CHECKOUT_DIR%
+          echo.
+          echo ABE_MASTER_BUILD:
+          echo %ABE_MASTER_BUILD%
 
-          echo TARGET_ENVIRONMENT=%TARGET_ENVIRONMENT%
+          echo.
+          echo CHECKOUT_DIR:
+          echo %CHECKOUT_DIR%
 
-          echo TARGET_ISGROUP_ALIAS=%TARGET_ISGROUP_ALIAS%
+          echo.
+          echo PACKAGE_NAME:
+          echo %PACKAGE_NAME%
 
-          echo BUILD_NUMBER=%MAIN_BUILDNUMBER%
+          echo.
+          echo TARGET_ENVIRONMENT:
+          echo %TARGET_ENVIRONMENT%
+
+          echo.
+          echo TARGET_ISGROUP_ALIAS:
+          echo %TARGET_ISGROUP_ALIAS%
+
+          echo.
+          echo BUILD_NUMBER:
+          echo %MAIN_BUILDNUMBER%
+
+          echo.
 
 
-          if not exist "%ABE_BUILD%" (
+          if not exist "%ANT_HOME%\bin\ant.bat" (
 
-              echo ERROR: ABE build.bat not found.
-
+              echo ERROR: Ant not found.
               exit /b 1
           )
 
 
-          echo ABE build.bat found successfully.
+          if not exist "%ABE_MASTER_BUILD%" (
+
+              echo ERROR: ABE master build.xml not found.
+              exit /b 1
+          )
+
+
+          echo Starting ABE master build...
+
+
+          call "%ANT_HOME%\bin\ant.bat" ^
+            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
+            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
+            -DtargetEnv="%TARGET_ENVIRONMENT%" ^
+            -DSAGHome="C:\SoftwareAG11_ABE" ^
+            -DprojectName="ThermoDemoPackage1_%MAIN_BUILDNUMBER%" ^
+            -f "%ABE_MASTER_BUILD%" ^
+            build
+
+
+          set "ABE_EXIT_CODE=%ERRORLEVEL%"
 
 
           echo.
-          echo NOTE:
-          echo The original Jenkins pipeline invokes
-          echo the SAG DevOps Ant build.xml.
+          echo ============================================
+          echo ABE EXIT CODE: %ABE_EXIT_CODE%
+          echo ============================================
+
+
+          if not "%ABE_EXIT_CODE%"=="0" (
+
+              echo.
+              echo ERROR: ABE Build FAILED.
+
+              exit /b %ABE_EXIT_CODE%
+          )
+
+
           echo.
-          echo Actual ABE build invocation will be
-          echo enabled after confirming the required
-          echo ABE build parameters.
+          echo ABE Build completed successfully.
 
 
-      # =====================================================
-      # 8. Validate Project Automator
-      # =====================================================
+      # =======================================================
+      # 10. Validate Project Automator
+      # =======================================================
 
       - name: Validate Project Automator
 
@@ -470,23 +732,13 @@ jobs:
         run: |
 
           Write-Host "============================================"
-
           Write-Host "Project Automator Validation"
-
           Write-Host "============================================"
-
-
-          Write-Host "Project Automator:"
-          Write-Host $env:PROJECT_AUTOMATOR
-
-
-          Write-Host "Project Automator XML:"
-          Write-Host $env:PROJECT_AUTOMATOR_XML
 
 
           if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR)) {
 
-              Write-Error "projectAutomator.bat was not found."
+              Write-Error "Project Automator not found."
 
               exit 1
           }
@@ -494,20 +746,88 @@ jobs:
 
           if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR_XML)) {
 
-              Write-Error "ProjectAutomator.xml was not found."
+              Write-Error "ProjectAutomator.xml not found."
 
               exit 1
           }
 
 
-          Write-Host ""
+          Write-Host "Project Automator : FOUND"
+          Write-Host "Project XML       : FOUND"
 
-          Write-Host "Project Automator files found successfully."
+
+      # =======================================================
+      # 11. Create Deployment Project
+      # =======================================================
+
+      - name: Create Deployment Project
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo CREATE DEPLOYMENT PROJECT
+          echo ============================================
+
+          echo.
+          echo Project Automator:
+          echo %PROJECT_AUTOMATOR%
+
+          echo.
+          echo Project XML:
+          echo %PROJECT_AUTOMATOR_XML%
+
+          echo.
+          echo Executing Project Automator...
 
 
-      # =====================================================
-      # 9. Validate Deployer
-      # =====================================================
+          call "%PROJECT_AUTOMATOR%" "%PROJECT_AUTOMATOR_XML%"
+
+
+          set "PROJECT_AUTOMATOR_EXIT=%ERRORLEVEL%"
+
+
+          echo.
+          echo Project Automator Exit Code:
+          echo %PROJECT_AUTOMATOR_EXIT%
+
+
+          if not "%PROJECT_AUTOMATOR_EXIT%"=="0" (
+
+              echo.
+              echo ERROR: Project Automator failed.
+
+              exit /b %PROJECT_AUTOMATOR_EXIT%
+          )
+
+
+          echo.
+          echo Project Automator completed successfully.
+
+
+      # =======================================================
+      # 12. Variable Substitution
+      #
+      # The current Jenkins stage only contains an echo.
+      # =======================================================
+
+      - name: Variable Substitution
+
+        shell: cmd
+
+        run: |
+
+          echo ============================================
+          echo VARIABLE SUBSTITUTION
+          echo ============================================
+
+          echo Variable Substitution step.
+
+
+      # =======================================================
+      # 13. Validate Deployer
+      # =======================================================
 
       - name: Validate Deployer
 
@@ -516,61 +836,214 @@ jobs:
         run: |
 
           Write-Host "============================================"
-
           Write-Host "Deployer Validation"
-
           Write-Host "============================================"
 
 
           Write-Host "Deployer:"
           Write-Host $env:DEPLOYER_CMD
 
+          Write-Host ""
+          Write-Host "Server:"
+          Write-Host "$env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
+
+          Write-Host ""
+          Write-Host "User:"
+          Write-Host $env:DEPLOYER_USER
+
 
           if (-not (Test-Path -LiteralPath $env:DEPLOYER_CMD)) {
 
-              Write-Error "Deployer.bat was not found."
+              Write-Error "Deployer.bat not found."
 
               exit 1
           }
 
 
           Write-Host ""
-
           Write-Host "Deployer.bat found successfully."
 
 
-      # =====================================================
-      # 10. Integration Test Suite
-      # =====================================================
+      # =======================================================
+      # 14. Deploy
+      #
+      # Password is supplied through GitHub Secret:
+      #
+      # DEPLOYER_PASSWORD
+      # =======================================================
 
-      - name: IntegrationTestSuite Tests
-
-        if: ${{ inputs.executeWmTestSuite == true }}
+      - name: Deploy
 
         shell: cmd
 
         run: |
 
           echo ============================================
-          echo WebMethods Integration Test Suite
+          echo WEBMETHODS DEPLOYMENT
           echo ============================================
 
-          echo CHECKOUT_DIR=%CHECKOUT_DIR%
+          echo.
+          echo Deployer:
+          echo %DEPLOYER_CMD%
+
+          echo.
+          echo Server:
+          echo %DEPLOYER_HOST%:%DEPLOYER_PORT%
+
+          echo.
+          echo User:
+          echo %DEPLOYER_USER%
+
+          echo.
+          echo Deployment Control:
+          echo %DEPLOYMENT_CONTROL%
+
+          echo.
+          echo Deployment Project:
+          echo %DEPLOYMENT_PROJECT%
+
+          echo.
+          echo Target IS Group:
+          echo %TARGET_ISGROUP_ALIAS%
 
 
-          echo NOTE:
-          echo Actual WM Test Suite execution will be
-          echo enabled after confirming its location
-          echo in the current SoftwareAG installation.
+          if "%DEPLOYER_PASSWORD%"=="" (
+
+              echo.
+              echo ERROR: DEPLOYER_PASSWORD secret is not configured.
+
+              exit /b 1
+          )
 
 
-      # =====================================================
-      # 11. Upload Integration Test Results
-      # =====================================================
+          echo.
+          echo Starting deployment...
+
+
+          call "%DEPLOYER_CMD%" ^
+            --deploy ^
+            -dc "%DEPLOYMENT_CONTROL%" ^
+            -project "%DEPLOYMENT_PROJECT%" ^
+            -host "%DEPLOYER_HOST%" ^
+            -port "%DEPLOYER_PORT%" ^
+            -user "%DEPLOYER_USER%" ^
+            -pwd "%DEPLOYER_PASSWORD%" ^
+            -force
+
+
+          set "DEPLOYER_EXIT_CODE=%ERRORLEVEL%"
+
+
+          echo.
+          echo ============================================
+          echo DEPLOYER EXIT CODE: %DEPLOYER_EXIT_CODE%
+          echo ============================================
+
+
+          if not "%DEPLOYER_EXIT_CODE%"=="0" (
+
+              echo.
+              echo ERROR: WebMethods deployment failed.
+
+              exit /b %DEPLOYER_EXIT_CODE%
+          )
+
+
+          echo.
+          echo WebMethods deployment completed successfully.
+
+
+      # =======================================================
+      # 15. Adapter Configuration
+      #
+      # Jenkins runs this only when HAS_ADAPTERPKG=true.
+      # The old Jenkins pipeline invokes another Jenkins job.
+      # =======================================================
+
+      - name: Deploy Adapter Configuration
+
+        if: env.HAS_ADAPTERPKG == 'true'
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "ADAPTER CONFIGURATION"
+          Write-Host "============================================"
+
+          Write-Host "Target IS Group:"
+          Write-Host $env:TARGET_ISGROUP_ALIAS
+
+          Write-Host ""
+          Write-Host "Adapter Package:"
+          Write-Host $env:ADAPTER_CONFIGPKG
+
+          Write-Host ""
+          Write-Host "Repository Branch:"
+          Write-Host $env:REPO_BRANCH_NAME
+
+          Write-Host ""
+          Write-Host "Adapter configuration is enabled."
+
+          Write-Host ""
+          Write-Host "NOTE:"
+          Write-Host "The original Jenkins pipeline invokes the"
+          Write-Host "sagdevops-cicd-checkout-adaptersconfig"
+          Write-Host "downstream Jenkins job."
+
+          Write-Host ""
+          Write-Host "This downstream job must be migrated separately"
+          Write-Host "to GitHub Actions."
+
+
+      # =======================================================
+      # 16. Integration Test Suite
+      #
+      # Enabled only when executeWmTestSuite=true.
+      #
+      # Your original Jenkins path referenced:
+      # CICD_HOME/cicd/scripts/wmtestsuite/buildTest.xml
+      #
+      # That file does not exist in the runner path we
+      # previously checked, so this remains a controlled
+      # placeholder until its actual location is provided.
+      # =======================================================
+
+      - name: Integration Test Suite
+
+        if: env.EXECUTE_WMTEST == 'true'
+
+        shell: powershell
+
+        run: |
+
+          Write-Host "============================================"
+          Write-Host "INTEGRATION TEST SUITE"
+          Write-Host "============================================"
+
+          Write-Host ""
+          Write-Host "Checkout Directory:"
+          Write-Host $env:CHECKOUT_DIR
+
+          Write-Host ""
+          Write-Host "WM Test Suite requested."
+
+          Write-Warning "The original Jenkins buildTest.xml location"
+          Write-Warning "is not currently present under the configured"
+          Write-Warning "runner paths."
+
+          Write-Warning "WM Test execution will be enabled once the"
+          Write-Warning "actual buildTest.xml path is confirmed."
+
+
+      # =======================================================
+      # 17. Upload Integration Test Results
+      # =======================================================
 
       - name: Upload Integration Test Results
 
-        if: ${{ always() && inputs.executeWmTestSuite == true }}
+        if: always() && env.EXECUTE_WMTEST == 'true'
 
         uses: actions/upload-artifact@v4
 
@@ -585,101 +1058,147 @@ jobs:
           if-no-files-found: warn
 
 
-      # =====================================================
-      # 12. PostMan Unit Tests
-      # =====================================================
+      # =======================================================
+      # 18. Postman
+      # =======================================================
 
-      - name: PostMan Unit Tests
+      - name: Postman Unit Tests
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ============================================
-          echo PostMan Unit Tests
-          echo ============================================
+          Write-Host "============================================"
+          Write-Host "POSTMAN UNIT TESTS"
+          Write-Host "============================================"
 
-          echo PostMan Unit Tests
-
-          echo Currently a placeholder,
-          echo same as Jenkins pipeline.
+          Write-Host "Postman stage."
 
 
-      # =====================================================
-      # 13. SonarScanner Code Review
-      # =====================================================
+      # =======================================================
+      # 19. SonarScanner
+      # =======================================================
 
       - name: SonarScanner Code Review
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ============================================
-          echo SonarScanner Code Review
-          echo ============================================
+          Write-Host "============================================"
+          Write-Host "SONARSCANNER CODE REVIEW"
+          Write-Host "============================================"
 
-          echo 3rd party static code review sonarscanner
-
-          echo Currently a placeholder,
-          echo same as Jenkins pipeline.
+          Write-Host "SonarScanner stage."
 
 
-      # =====================================================
-      # 14. JMeter Performance Test
-      # =====================================================
+      # =======================================================
+      # 20. JMeter
+      # =======================================================
 
       - name: JMeter Performance Test
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ============================================
-          echo JMeter Performance Test
-          echo ============================================
+          Write-Host "============================================"
+          Write-Host "JMETER PERFORMANCE TEST"
+          Write-Host "============================================"
 
-          echo jmeterPerformanceTest
-
-          echo Currently a placeholder,
-          echo same as Jenkins pipeline.
+          Write-Host "JMeter stage."
 
 
-      # =====================================================
-      # 15. SOAPUI
-      # =====================================================
+      # =======================================================
+      # 21. SOAPUI
+      # =======================================================
 
-      - name: SOAPUI Testing
+      - name: SOAPUI Tests
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ============================================
-          echo SOAPUI Testing
-          echo ============================================
+          Write-Host "============================================"
+          Write-Host "SOAPUI TESTS"
+          Write-Host "============================================"
 
-          echo SOAPUI testing
-
-          echo Currently a placeholder,
-          echo same as Jenkins pipeline.
+          Write-Host "SOAPUI stage."
 
 
-      # =====================================================
-      # 16. Send Reports
-      # =====================================================
+      # =======================================================
+      # 22. Send Reports
+      # =======================================================
 
       - name: Send Reports
 
-        shell: cmd
+        if: always()
+
+        shell: powershell
 
         run: |
 
-          echo ============================================
-          echo Send Reports
-          echo ============================================
+          Write-Host "============================================"
+          Write-Host "SEND REPORTS"
+          Write-Host "============================================"
 
-          echo sagdevops-cicd-sendreports
+          Write-Host "sagdevops-cicd-sendreports"
 
-          echo Currently a placeholder,
-          echo same as Jenkins pipeline.
+
+      # =======================================================
+      # 23. Final Environment Summary
+      # =======================================================
+
+      - name: Environment Summary
+
+        if: always()
+
+        shell: powershell
+
+        run: |
+
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "WEBMETHODS CI/CD SUMMARY"
+          Write-Host "============================================"
+
+          Write-Host ""
+          Write-Host "Runner              : $env:RUNNER_NAME"
+          Write-Host "Computer            : $env:COMPUTERNAME"
+
+          Write-Host ""
+          Write-Host "Repository          : $env:GITHUB_REPOSITORY"
+          Write-Host "Branch              : $env:GITHUB_REF_NAME"
+          Write-Host "Commit              : $env:GITHUB_SHA"
+
+          Write-Host ""
+          Write-Host "Package             : $env:PACKAGE_NAME"
+          Write-Host "Target Environment  : $env:TARGET_ENVIRONMENT"
+          Write-Host "Target IS Group     : $env:TARGET_ISGROUP_ALIAS"
+          Write-Host "Build Number        : $env:MAIN_BUILDNUMBER"
+
+          Write-Host ""
+          Write-Host "Java                : $env:JAVA_HOME"
+          Write-Host "Ant                 : $env:ANT_HOME"
+          Write-Host "ABE                 : $env:ABE_HOME"
+          Write-Host "ABE Master Build    : $env:ABE_MASTER_BUILD"
+
+          Write-Host ""
+          Write-Host "Checkout            : $env:CHECKOUT_DIR"
+
+          Write-Host ""
+          Write-Host "ISCCR               : $env:ISCCR_HOME"
+
+          Write-Host ""
+          Write-Host "Project Automator   : $env:PROJECT_AUTOMATOR"
+
+          Write-Host ""
+          Write-Host "Deployer            : $env:DEPLOYER_CMD"
+          Write-Host "Deployment Server   : $env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
+          Write-Host "Deployment Control  : $env:DEPLOYMENT_CONTROL"
+          Write-Host "Deployment Project  : $env:DEPLOYMENT_PROJECT"
+
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "Pipeline finished"
+          Write-Host "============================================"
