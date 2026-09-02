@@ -197,12 +197,6 @@ jobs:
               ABE_IS_OUTPUT_DIR          = [string]$config.abeIsOutputDir
               COMPOSITE_NAME             = [string]$config.compositeName
 
-              ISCCR_HOME                 = [string]$config.isccrHome
-              ISCCR_CMD                  = [string]$config.isccrCmd
-              ISCCR_LOG                  = [string]$config.isccrLog
-              ISCCR_PACKAGE_PREFIX       = [string]$config.isccrPackagePrefix
-              ISCCR_FOLDER_PREFIX        = [string]$config.isccrFolderPrefix
-
               PROJECT_AUTOMATOR           = [string]$config.projectAutomator
               PROJECT_AUTOMATOR_XML       = [string]$config.projectAutomatorXml
 
@@ -294,7 +288,6 @@ jobs:
               ANT                   = (Join-Path $env:ANT_HOME 'bin\ant.bat')
               ABE_BUILD             = $env:ABE_BUILD
               ABE_MASTER_BUILD      = $env:ABE_MASTER_BUILD
-              ISCCR_CMD             = $env:ISCCR_CMD
               PROJECT_AUTOMATOR     = $env:PROJECT_AUTOMATOR
               PROJECT_AUTOMATOR_XML = $env:PROJECT_AUTOMATOR_XML
               DEPLOYER_CMD          = $env:DEPLOYER_CMD
@@ -358,53 +351,8 @@ jobs:
           }
 
           Write-Host "Package found: $packagePath"
-
       # =========================================================
-      # 7. ISCCR - deploy only, non-blocking
-      # =========================================================
-      - name: ISCCR Code Review
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        continue-on-error: true
-        shell: cmd
-        run: |
-          echo ============================================
-          echo ISCCR STATIC CODE REVIEW
-          echo ============================================
-
-          call "%ISCCR_CMD%" ^
-            -Dcode.review.pkgname=%PACKAGE_NAME% ^
-            -Dcode.review.pkgprefix=%ISCCR_PACKAGE_PREFIX% ^
-            -Dcode.review.folder-prefix=%ISCCR_FOLDER_PREFIX% ^
-            -Dcode.review.directory="%CHECKOUT_DIR%\%PACKAGE_NAME%"
-
-          echo.
-          echo ISCCR Exit Code: %ERRORLEVEL%
-          echo ISCCR is non-blocking.
-
-      # =========================================================
-      # 8. Evaluate ISCCR - informational
-      # =========================================================
-      - name: Evaluate ISCCR Result
-        if: always() && env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          if (-not (Test-Path -LiteralPath $env:ISCCR_LOG)) {
-              Write-Warning "ISCCR log not found: $env:ISCCR_LOG"
-              exit 0
-          }
-
-          $content = Get-Content -LiteralPath $env:ISCCR_LOG -Raw
-          $match = [regex]::Match($content, 'CODE REVIEW STATUS - (PASS|WARNING|FAILED)')
-
-          if ($match.Success) {
-              Write-Host "ISCCR Status: $($match.Groups[1].Value)"
-          }
-          else {
-              Write-Warning "ISCCR status not found."
-          }
-
-      # =========================================================
-      # 9. Prepare ABE output directory - deploy only
+      # 7. Prepare ABE output directory - deploy only
       # =========================================================
       - name: Prepare ABE Output Directory
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -417,7 +365,7 @@ jobs:
           Write-Host "ABE output directory: $env:BUILD_OUTPUT_DIR"
 
       # =========================================================
-      # 10. ABE Build - deploy only
+      # 8. ABE Build - deploy only
       # =========================================================
       - name: ABE Build
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -458,7 +406,7 @@ jobs:
           echo ABE Build completed successfully.
 
       # =========================================================
-      # 11. Verify ABE deployment artifact - deploy only
+      # 9. Verify ABE deployment artifact - deploy only
       # =========================================================
       - name: Verify ABE Deployment Artifact
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -475,7 +423,7 @@ jobs:
           Write-Host "Deployment artifact found: $artifact"
 
       # =========================================================
-      # 12. Validate dependency configuration - deploy only
+      # 10. Validate dependency configuration - deploy only
       # =========================================================
       - name: Validate Dependency Configuration
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -500,7 +448,7 @@ jobs:
           Write-Host "Missing dependency checking is configured as blocking."
 
       # =========================================================
-      # 13. Validate Project Automator
+      # 11. Validate Project Automator
       # =========================================================
       - name: Validate Project Automator
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -520,7 +468,7 @@ jobs:
           Write-Host "ProjectAutomator.xml : FOUND"
 
       # =========================================================
-      # 14. Validate connectivity - deploy and rollback
+      # 12. Validate connectivity - deploy and rollback
       # =========================================================
       - name: Validate Deployment Connectivity
         if: always()
@@ -551,7 +499,7 @@ jobs:
           Write-Host "Target Integration Server connectivity: OK"
 
       # =========================================================
-      # 15. Create deployment project - deploy only
+      # 13. Create deployment project - deploy only
       # =========================================================
       - name: Create Deployment Project
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -595,7 +543,7 @@ jobs:
           )
 
       # =========================================================
-      # 16. Verify deployment project - deploy only
+      # 14. Verify deployment project - deploy only
       # =========================================================
       - name: Verify Deployment Project
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -632,7 +580,7 @@ jobs:
           echo Project exists: %DEPLOYMENT_PROJECT%
 
       # =========================================================
-      # 17. Verify deployment candidate - deploy only
+      # 15. Verify deployment candidate - deploy only
       # =========================================================
       - name: Verify Deployment Candidate
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -670,7 +618,7 @@ jobs:
           echo Deployment candidate exists: %DEPLOYMENT_CONTROL%
 
       # =========================================================
-      # 18. Simulate deployment - deploy only
+      # 16. Simulate deployment - deploy only
       # =========================================================
       - name: Simulate Deployment
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -706,7 +654,7 @@ jobs:
           echo Deployment simulation passed.
 
       # =========================================================
-      # 19. Actual deployment - deploy only
+      # 17. Actual deployment - deploy only
       # =========================================================
       - name: Deploy to Target Integration Server
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -750,7 +698,7 @@ jobs:
           echo ============================================
 
       # =========================================================
-      # 20. Verify target IS after deployment
+      # 18. Verify target IS after deployment
       # =========================================================
       - name: Verify Target Integration Server
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -769,7 +717,7 @@ jobs:
           Write-Host "Target Integration Server is reachable."
 
       # =========================================================
-      # 21. Rollback
+      # 19. Rollback
       # =========================================================
       - name: Rollback Deployment
         if: env.DEPLOYMENT_ACTION == 'rollback'
@@ -815,7 +763,7 @@ jobs:
           echo ============================================
 
       # =========================================================
-      # 22. Adapter configuration - deploy only
+      # 20. Adapter configuration - deploy only
       # =========================================================
       - name: Deploy Adapter Configuration
         if: env.DEPLOYMENT_ACTION == 'deploy' && env.HAS_ADAPTERPKG == 'true'
@@ -830,7 +778,7 @@ jobs:
           Write-Warning "The original Jenkins downstream adapter job still needs to be migrated."
 
       # =========================================================
-      # 23. Integration Test Suite - deploy only
+      # 21. Integration Test Suite - deploy only
       # =========================================================
       - name: Integration Test Suite
         if: env.DEPLOYMENT_ACTION == 'deploy' && env.EXECUTE_WMTEST == 'true'
@@ -842,7 +790,7 @@ jobs:
           Write-Warning "The original wmtestsuite buildTest.xml location has not yet been confirmed on this runner."
 
       # =========================================================
-      # 24. Postman - deploy only
+      # 22. Postman - deploy only
       # =========================================================
       - name: Postman Unit Tests
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -851,7 +799,7 @@ jobs:
           Write-Host "Postman Unit Tests stage."
 
       # =========================================================
-      # 25. SonarScanner - deploy only
+      # 23. SonarScanner - deploy only
       # =========================================================
       - name: SonarScanner Code Review
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -860,7 +808,7 @@ jobs:
           Write-Host "SonarScanner Code Review stage."
 
       # =========================================================
-      # 26. JMeter - deploy only
+      # 24. JMeter - deploy only
       # =========================================================
       - name: JMeter Performance Test
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -869,7 +817,7 @@ jobs:
           Write-Host "JMeter Performance Test stage."
 
       # =========================================================
-      # 27. SOAPUI - deploy only
+      # 25. SOAPUI - deploy only
       # =========================================================
       - name: SOAPUI Tests
         if: env.DEPLOYMENT_ACTION == 'deploy'
@@ -878,7 +826,7 @@ jobs:
           Write-Host "SOAPUI Tests stage."
 
       # =========================================================
-      # 28. Store reports
+      # 26. Store reports
       #
       # Always runs for deploy and rollback.
       # =========================================================
@@ -914,8 +862,6 @@ jobs:
                   Write-Host "Copied: $Source"
               }
           }
-
-          Copy-ReportIfExists $env:ISCCR_LOG 'ISCCR.log'
           Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'project_automator.log') 'ProjectAutomator.log'
           Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployer_projects.txt') 'DeployerProjects.txt'
           Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployment_candidates.txt') 'DeploymentCandidates.txt'
@@ -975,7 +921,7 @@ jobs:
           Get-ChildItem -LiteralPath $runReportDir -Recurse -Force
 
       # =========================================================
-      # 29. Final summary
+      # 27. Final summary
       # =========================================================
       - name: Final Environment Summary
         if: always()
