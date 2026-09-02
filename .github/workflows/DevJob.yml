@@ -75,6 +75,11 @@ jobs:
     name: WebMethods CI/CD
     runs-on: [self-hosted, windows, webmethods]
 
+    # Bind this job to the GitHub Environment selected in Run workflow.
+    # Environment-level vars/secrets are then available as vars.* / secrets.*.
+    environment:
+      name: ${{ inputs.targetEnvironment || 'DEV' }}
+
     steps:
 
       # =========================================================
@@ -106,6 +111,10 @@ jobs:
           DEPLOYMENT_ACTION_INPUT: ${{ inputs.deploymentAction || 'deploy' }}
           GITHUB_REF_NAME_INPUT: ${{ github.ref_name }}
           DEPLOYER_PASSWORD_SECRET: ${{ secrets.DEPLOYER_PASSWORD }}
+          JAVA_EXE_GH: ${{ vars.JAVA_EXE }}
+          WM_HOME_GH: ${{ vars.WM_HOME }}
+          IS_HOME_GH: ${{ vars.IS_HOME }}
+          IS_INSTANCE_GH: ${{ vars.IS_INSTANCE }}
         run: |
           $configPath = Join-Path $env:GITHUB_WORKSPACE $env:CONFIG_FILE_INPUT
 
@@ -169,7 +178,13 @@ jobs:
               EXECUTE_WMTEST              = $env:EXECUTE_WMTEST_INPUT
               DEPLOYMENT_ACTION           = $env:DEPLOYMENT_ACTION_INPUT
 
-              # Static/environment-specific configuration
+              # Runner/WebMethods installation paths from the selected GitHub Environment
+              JAVA_EXE                    = [string]$env:JAVA_EXE_GH
+              WM_HOME                     = [string]$env:WM_HOME_GH
+              IS_HOME                     = [string]$env:IS_HOME_GH
+              IS_INSTANCE                 = [string]$env:IS_INSTANCE_GH
+
+              # Existing config-driven tooling values
               JAVA_HOME                   = [string]$config.javaHome
               ANT_HOME                    = [string]$config.antHome
               SAG_HOME                    = [string]$config.sagHome
@@ -253,6 +268,10 @@ jobs:
           Write-Host "Checkout Directory  : $env:CHECKOUT_DIR"
           Write-Host "Build Output        : $env:BUILD_OUTPUT_DIR"
           Write-Host "SAG_HOME             : $env:SAG_HOME"
+          Write-Host "WM_HOME              : $env:WM_HOME"
+          Write-Host "JAVA_EXE             : $env:JAVA_EXE"
+          Write-Host "IS_HOME              : $env:IS_HOME"
+          Write-Host "IS_INSTANCE          : $env:IS_INSTANCE"
           Write-Host "ABE                 : $env:ABE_HOME"
           Write-Host "ABE Master Build    : $env:ABE_MASTER_BUILD"
           Write-Host "Deployer Server     : $env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
@@ -267,29 +286,42 @@ jobs:
       - name: Validate Java and WebMethods Tooling
         shell: powershell
         run: |
-          $required = @(
-            (Join-Path $env:JAVA_HOME 'bin\java.exe'),
-            $env:SAG_HOME,
-            (Join-Path $env:ANT_HOME 'bin\ant.bat'),
-            $env:ABE_BUILD,
-            $env:ABE_MASTER_BUILD,
-            $env:ISCCR_CMD,
-            $env:PROJECT_AUTOMATOR,
-            $env:PROJECT_AUTOMATOR_XML,
-            $env:DEPLOYER_CMD
-          )
+          $required = [ordered]@{
+              JAVA_EXE              = $env:JAVA_EXE
+              WM_HOME               = $env:WM_HOME
+              IS_HOME               = $env:IS_HOME
+              IS_INSTANCE           = $env:IS_INSTANCE
+              ANT                   = (Join-Path $env:ANT_HOME 'bin\ant.bat')
+              ABE_BUILD             = $env:ABE_BUILD
+              ABE_MASTER_BUILD      = $env:ABE_MASTER_BUILD
+              ISCCR_CMD             = $env:ISCCR_CMD
+              PROJECT_AUTOMATOR     = $env:PROJECT_AUTOMATOR
+              PROJECT_AUTOMATOR_XML = $env:PROJECT_AUTOMATOR_XML
+              DEPLOYER_CMD          = $env:DEPLOYER_CMD
+          }
 
-          foreach ($path in $required) {
-              Write-Host "Checking: $path"
-              if (-not (Test-Path -LiteralPath $path)) {
-                  Write-Error "Required path not found: $path"
+          foreach ($item in $required.GetEnumerator()) {
+              $name = $item.Key
+              $path = [string]$item.Value
+
+              Write-Host "Checking $name : [$path]"
+
+              if ([string]::IsNullOrWhiteSpace($path)) {
+                  Write-Error "Required path variable is empty: $name"
                   exit 1
               }
+
+              if (-not (Test-Path -LiteralPath $path)) {
+                  Write-Error "Required path not found for $name : [$path]"
+                  exit 1
+              }
+
+              Write-Host "$name : OK"
           }
 
           Write-Host ""
           Write-Host "Java version:"
-          & (Join-Path $env:JAVA_HOME 'bin\java.exe') -version
+          & $env:JAVA_EXE -version
 
       # =========================================================
       # 5. Prepare checkout directory - deploy only
