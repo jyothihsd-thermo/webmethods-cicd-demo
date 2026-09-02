@@ -1,0 +1,41 @@
+name: Deploy WebMethods
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - DEV
+          - QA
+          - PROD
+
+      server:
+        description: 'Target server'
+        required: true
+        type: string
+
+      version:
+        description: 'Build version to deploy'
+        required: true
+        type: string
+
+      deployTN:
+        description: 'Deploy Trading Networks assets?'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Display inputs
+        run: |
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Server: ${{ inputs.server }}"
+          echo "Version: ${{ inputs.version }}"
+          echo "Deploy TN: ${{ inputs.deployTN }}"
