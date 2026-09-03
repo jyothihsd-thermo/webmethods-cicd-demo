@@ -51,13 +51,8 @@ on:
 
 jobs:
 
-  ibm-cicd:
-
-    # This job runs on your existing Windows machine
-    runs-on:
-      - self-hosted
-      - my-laptop
-
+  name: WebMethods CI/CD
+  runs-on: [self-hosted, windows, webmethods]
     env:
 
       CICD_HOME: "C:/devops/sagdevops-cicd"
