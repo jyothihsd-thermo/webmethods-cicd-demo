@@ -106,7 +106,7 @@ jobs:
       TARGET_IS_PORT: '5551'
 
       # Confirmed Deployer project/candidate names
-      DEPLOYMENT_PROJECT: 'MyFirstCICD_Deploy1MyFirstCICD_Deploy1'
+      DEPLOYMENT_PROJECT: 'CR_Thermo_01'
       DEPLOYMENT_CONTROL: 'myDeployment'
 
       # ProjectAutomator.xml source repository
