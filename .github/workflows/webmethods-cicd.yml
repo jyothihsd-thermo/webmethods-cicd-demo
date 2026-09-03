@@ -76,7 +76,7 @@ jobs:
       ABE_MASTER_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\master_build\build.xml'
 
       # WebMethods checkout
-      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout'
+      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout\is\packages'
 
       # ABE build output / Deployer repository
       BUILD_OUTPUT_DIR: 'C:\SoftwareAG\tools\Build'
