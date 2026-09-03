@@ -160,7 +160,7 @@ jobs:
             -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
             build
 
-          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant" ^
+          %SAG_BUILD_HOME%\common\lib\ant\bin\ant ^
             -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
             -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
             -DtargetEnv="%TARGET_ENVIRONMENT%" ^
