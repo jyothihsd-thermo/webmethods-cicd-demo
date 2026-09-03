@@ -1,960 +1,270 @@
-name: ThermoCICD_DEV CI/CD
+name: ThermoFisher WebMethods CI/CD
 
 on:
   workflow_dispatch:
     inputs:
-      configFile:
-        description: "Environment configuration file"
-        required: true
-        type: string
-        default: "config/DEV.json"
-
-      deploymentAction:
-        description: "Deployment action"
-        required: true
-        type: choice
-        options:
-          - deploy
-          - rollback
-        default: deploy
 
       targetEnvironment:
         description: "Target Environment"
         required: true
         type: string
-        default: "DEV"
 
       packageName:
-        description: "WebMethods Package Name"
+        description: "IS Packages to deploy"
         required: true
         type: string
-        default: "ThermoDemoPackage1"
 
       targetISGroupAlias:
         description: "Target IS Group Alias"
         required: true
         type: string
-        default: "default"
-
-      buildName:
-        description: "Custom ABE Build Name (blank = package_run-number)"
-        required: false
-        type: string
-        default: ""
 
       buildNumber:
-        description: "Optional Build Number (blank = GitHub run number)"
-        required: false
+        description: "Main Build Number"
+        required: true
         type: string
-        default: ""
 
       hasAdapterPackage:
-        description: "Has Adapter Configuration Package"
+        description: "Has Adapter Package"
         required: true
         type: boolean
         default: false
 
       adapterConfigPackage:
-        description: "Adapter Configuration Package"
+        description: "Adapter Config Package"
         required: false
         type: string
         default: ""
 
+      RepoBranchName:
+        description: "Repository Branch"
+        required: true
+        type: string
+        default: "main"
+
       executeWmTestSuite:
-        description: "Execute WebMethods Integration Test Suite"
+        description: "Execute WM Test Suite"
         required: true
         type: boolean
         default: false
 
-  push:
-    branches:
-      - main
 
 jobs:
-  webmethods-cicd:
-    name: WebMethods CI/CD
-    runs-on: [self-hosted, windows, webmethods]
+
+  ibm-cicd:
+
+    # This job runs on your existing Windows machine
+    runs-on:
+      - self-hosted
+     
+
+    env:
+
+      CICD_HOME: "C:/devops/sagdevops-cicd"
+      SAG_BUILD_HOME: "C:/SoftwareAG11_ABE"
+      SAG_HOME: "C:/SoftwareAG11"
+      ANT_HOME: "C:/SoftwareAG11_ABE/common/lib/ant"
+      JAVA_HOME: "C:/SoftwareAG11/jvm/jvm/bin"
+
+      TARGET_ENVIRONMENT: ${{ inputs.targetEnvironment }}
+      ISPACKAGES_LIST: ${{ inputs.packageName }}
+      TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias }}
+
+      MAIN_BUILDNUMBER: ${{ inputs.buildNumber }}
+
+      HAS_ADAPTERPKG: ${{ inputs.hasAdapterPackage }}
+      ADAPTER_CONFIGPKG: ${{ inputs.adapterConfigPackage }}
+
+      REPO_BRANCH_NAME: ${{ inputs.RepoBranchName }}
+
+      EXECUTE_WMTEST: ${{ inputs.executeWmTestSuite }}
+
+      CHECKOUT_DIR: "C:/SoftwareAG/tools/Checkout"
+
 
     steps:
 
-     
-      # =========================================================
-      # 2. Load environment configuration
-      #
-      # Static/environment-specific values come from config/*.json
-      # Runtime values come from workflow_dispatch inputs / GitHub.
-      # =========================================================
-      - name: Load Environment Configuration
-        shell: powershell
-        env:
-          CONFIG_FILE_INPUT: ${{ inputs.configFile || 'config/DEV.json' }}
-          TARGET_ENVIRONMENT_INPUT: ${{ inputs.targetEnvironment || 'DEV' }}
-          PACKAGE_NAME_INPUT: ${{ inputs.packageName || 'ThermoDemoPackage1' }}
-          TARGET_ISGROUP_ALIAS_INPUT: ${{ inputs.targetISGroupAlias || 'default' }}
-          BUILD_NAME_INPUT: ${{ inputs.buildName || '' }}
-          BUILD_NUMBER_INPUT: ${{ inputs.buildNumber || '' }}
-          HAS_ADAPTERPKG_INPUT: ${{ inputs.hasAdapterPackage || false }}
-          ADAPTER_CONFIGPKG_INPUT: ${{ inputs.adapterConfigPackage || '' }}
-          EXECUTE_WMTEST_INPUT: ${{ inputs.executeWmTestSuite || false }}
-          DEPLOYMENT_ACTION_INPUT: ${{ inputs.deploymentAction || 'deploy' }}
-          GITHUB_REF_NAME_INPUT: ${{ github.ref_name }}
-          DEPLOYER_PASSWORD_SECRET: ${{ secrets.DEPLOYER_PASSWORD }}
-        run: |
-          $configPath = Join-Path $env:GITHUB_WORKSPACE $env:CONFIG_FILE_INPUT
+      # ==========================================================
+      # 1. Git Checkout
+      # ==========================================================
 
-          if (-not (Test-Path -LiteralPath $configPath)) {
-              Write-Error "Configuration file not found: $configPath"
-              exit 1
-          }
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v4
+        with:
+          clean: true
 
-          Write-Host "Loading configuration file: $configPath"
+      # ==========================================================
+      # 2. Set Environment Variables
+      # ==========================================================
 
-          try {
-              $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
-          }
-          catch {
-              Write-Error "Unable to parse configuration file: $configPath"
-              Write-Error $_.Exception.Message
-              exit 1
-          }
-
-          if ([string]::IsNullOrWhiteSpace($env:DEPLOYER_PASSWORD_SECRET)) {
-              Write-Error "GitHub Actions secret DEPLOYER_PASSWORD is not configured."
-              exit 1
-          }
-
-          # -------------------------------------------------------
-          # Runtime build number
-          # -------------------------------------------------------
-          $runtimeBuildNumber = $env:BUILD_NUMBER_INPUT
-          if ([string]::IsNullOrWhiteSpace($runtimeBuildNumber)) {
-              $runtimeBuildNumber = $env:GITHUB_RUN_NUMBER
-          }
-
-          # -------------------------------------------------------
-          # Runtime build name
-          # -------------------------------------------------------
-          $runtimeBuildName = $env:BUILD_NAME_INPUT
-          if ([string]::IsNullOrWhiteSpace($runtimeBuildName)) {
-              $runtimeBuildName = "{0}_{1}" -f $env:PACKAGE_NAME_INPUT, $runtimeBuildNumber
-          }
-
-          # -------------------------------------------------------
-          # Runtime branch
-          # Manual runs use the selected/actual ref. Push runs use
-          # the pushed branch.
-          # -------------------------------------------------------
-          $runtimeBranch = $env:GITHUB_REF_NAME_INPUT
-
-          # -------------------------------------------------------
-          # Values written to GITHUB_ENV for following steps
-          # -------------------------------------------------------
-          $values = [ordered]@{
-              CONFIG_FILE                 = $env:CONFIG_FILE_INPUT
-              TARGET_ENVIRONMENT           = $env:TARGET_ENVIRONMENT_INPUT
-              PACKAGE_NAME                = $env:PACKAGE_NAME_INPUT
-              TARGET_ISGROUP_ALIAS        = $env:TARGET_ISGROUP_ALIAS_INPUT
-              MAIN_BUILDNUMBER            = $runtimeBuildNumber
-              BUILD_NAME                  = $runtimeBuildName
-              HAS_ADAPTERPKG              = $env:HAS_ADAPTERPKG_INPUT
-              ADAPTER_CONFIGPKG           = $env:ADAPTER_CONFIGPKG_INPUT
-              REPO_BRANCH_NAME            = $runtimeBranch
-              EXECUTE_WMTEST              = $env:EXECUTE_WMTEST_INPUT
-              DEPLOYMENT_ACTION           = $env:DEPLOYMENT_ACTION_INPUT
-
-              # Static/environment-specific configuration
-              JAVA_HOME                   = [string]$config.javaHome
-              ANT_HOME                    = [string]$config.antHome
-              SAG_HOME                    = [string]$config.sagHome
-              ABE_HOME                    = [string]$config.abeHome
-              ABE_BUILD                  = [string]$config.abeBuild
-              ABE_MASTER_BUILD           = [string]$config.abeMasterBuild
-
-              CHECKOUT_DIR               = [string]$config.checkoutDir
-              BUILD_OUTPUT_DIR           = [string]$config.buildOutputDir
-              ABE_IS_OUTPUT_DIR          = [string]$config.abeIsOutputDir
-              COMPOSITE_NAME             = [string]$config.compositeName
-
-              ISCCR_HOME                 = [string]$config.isccrHome
-              ISCCR_CMD                  = [string]$config.isccrCmd
-              ISCCR_LOG                  = [string]$config.isccrLog
-              ISCCR_PACKAGE_PREFIX       = [string]$config.isccrPackagePrefix
-              ISCCR_FOLDER_PREFIX        = [string]$config.isccrFolderPrefix
-
-              PROJECT_AUTOMATOR           = [string]$config.projectAutomator
-              PROJECT_AUTOMATOR_XML       = [string]$config.projectAutomatorXml
-
-              DEPLOYER_HOME              = [string]$config.deployerHome
-              DEPLOYER_CMD               = [string]$config.deployerCmd
-              DEPLOYER_HOST              = [string]$config.deployerHost
-              DEPLOYER_PORT              = [string]$config.deployerPort
-              DEPLOYER_USER              = [string]$config.deployerUser
-              DEPLOYER_PASSWORD          = $env:DEPLOYER_PASSWORD_SECRET
-
-              TARGET_IS_HOST             = [string]$config.targetIsHost
-              TARGET_IS_PORT             = [string]$config.targetIsPort
-
-              DEPLOYMENT_PROJECT         = [string]$config.deploymentProject
-              DEPLOYMENT_CONTROL         = [string]$config.deploymentCandidate
-              DEPLOYMENT_SOURCE_DIR      = [string]$config.deploymentSourceDir
-
-              REPORT_DIR                 = [string]$config.reportDir
-          }
-
-          foreach ($item in $values.GetEnumerator()) {
-              "$($item.Key)=$($item.Value)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          }
-
-          # Add Java and Ant to PATH for subsequent steps.
-          "$(Join-Path $config.javaHome 'bin')" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          "$(Join-Path $config.antHome 'bin')" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-
-          Write-Host "Configuration loaded successfully."
-          Write-Host "Config file        : $env:CONFIG_FILE_INPUT"
-          Write-Host "Target environment : $env:TARGET_ENVIRONMENT_INPUT"
-          Write-Host "Package            : $env:PACKAGE_NAME_INPUT"
-          Write-Host "Build number       : $runtimeBuildNumber"
-          Write-Host "Build name         : $runtimeBuildName"
-          Write-Host "Deployment action  : $env:DEPLOYMENT_ACTION_INPUT"
-          Write-Host "Checkout directory : $($config.checkoutDir)"
-          Write-Host "Build output       : $($config.buildOutputDir)"
-          Write-Host "Deployer server    : $($config.deployerHost):$($config.deployerPort)"
-          Write-Host "Target IS          : $($config.targetIsHost):$($config.targetIsPort)"
-          Write-Host "Report directory   : $($config.reportDir)"
-
-      # =========================================================
-      # 3. Display resolved configuration
-      # =========================================================
-      - name: Display Build Information
-        shell: powershell
-        run: |
-          Write-Host "============================================"
-          Write-Host "WEBMETHODS CI/CD"
-          Write-Host "============================================"
-          Write-Host "Repository          : $env:GITHUB_REPOSITORY"
-          Write-Host "Branch              : $env:REPO_BRANCH_NAME"
-          Write-Host "Commit              : $env:GITHUB_SHA"
-          Write-Host "Runner              : $env:RUNNER_NAME"
-          Write-Host "Computer            : $env:COMPUTERNAME"
-          Write-Host "Config File         : $env:CONFIG_FILE"
-          Write-Host "Deployment Action   : $env:DEPLOYMENT_ACTION"
-          Write-Host "Package             : $env:PACKAGE_NAME"
-          Write-Host "Target Environment  : $env:TARGET_ENVIRONMENT"
-          Write-Host "Target IS Group     : $env:TARGET_ISGROUP_ALIAS"
-          Write-Host "Build Number        : $env:MAIN_BUILDNUMBER"
-          Write-Host "Build Name          : $env:BUILD_NAME"
-          Write-Host "Checkout Directory  : $env:CHECKOUT_DIR"
-          Write-Host "Build Output        : $env:BUILD_OUTPUT_DIR"
-          Write-Host "SAG_HOME             : $env:SAG_HOME"
-          Write-Host "ABE                 : $env:ABE_HOME"
-          Write-Host "ABE Master Build    : $env:ABE_MASTER_BUILD"
-          Write-Host "Deployer Server     : $env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
-          Write-Host "Target IS           : $env:TARGET_IS_HOST`:$env:TARGET_IS_PORT"
-          Write-Host "Deployment Project  : $env:DEPLOYMENT_PROJECT"
-          Write-Host "Deployment Candidate: $env:DEPLOYMENT_CONTROL"
-          Write-Host "Report Directory    : $env:REPORT_DIR"
-
-      # =========================================================
-      # 4. Validate Java and WebMethods tooling
-      # =========================================================
-      - name: Validate Java and WebMethods Tooling
-        shell: powershell
-        run: |
-          $required = @(
-            (Join-Path $env:JAVA_HOME 'bin\java.exe'),
-            $env:SAG_HOME,
-            (Join-Path $env:ANT_HOME 'bin\ant.bat'),
-            $env:ABE_BUILD,
-            $env:ABE_MASTER_BUILD,
-            $env:ISCCR_CMD,
-            $env:PROJECT_AUTOMATOR,
-            $env:PROJECT_AUTOMATOR_XML,
-            $env:DEPLOYER_CMD
-          )
-
-          foreach ($path in $required) {
-              Write-Host "Checking: $path"
-              if (-not (Test-Path -LiteralPath $path)) {
-                  Write-Error "Required path not found: $path"
-                  exit 1
-              }
-          }
-
-          Write-Host ""
-          Write-Host "Java version:"
-          & (Join-Path $env:JAVA_HOME 'bin\java.exe') -version
-
-      # =========================================================
-      # 5. Prepare checkout directory - deploy only
-      # =========================================================
-      - name: Prepare WebMethods Checkout Directory
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          if (-not (Test-Path -LiteralPath $env:CHECKOUT_DIR)) {
-              New-Item -ItemType Directory -Path $env:CHECKOUT_DIR -Force | Out-Null
-          }
-
-          Get-ChildItem -LiteralPath $env:CHECKOUT_DIR -Force |
-            Remove-Item -Recurse -Force -ErrorAction Stop
-
-          Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Force |
-            Where-Object { $_.Name -ne '.git' } |
-            Copy-Item -Destination $env:CHECKOUT_DIR -Recurse -Force -ErrorAction Stop
-
-          Write-Host "Repository copied to: $env:CHECKOUT_DIR"
-
-      # =========================================================
-      # 6. Verify package - deploy only
-      # =========================================================
-      - name: Verify WebMethods Package
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          $packagePath = Join-Path $env:CHECKOUT_DIR $env:PACKAGE_NAME
-
-          if (-not (Test-Path -LiteralPath $packagePath)) {
-              Write-Error "Package not found: $packagePath"
-              exit 1
-          }
-
-          Write-Host "Package found: $packagePath"
-
-      # =========================================================
-      # 7. ISCCR - deploy only, non-blocking
-      # =========================================================
-      - name: ISCCR Code Review
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        continue-on-error: true
+      - name: Set Environment Variables
         shell: cmd
         run: |
-          echo ============================================
-          echo ISCCR STATIC CODE REVIEW
-          echo ============================================
 
-          call "%ISCCR_CMD%" ^
-            -Dcode.review.pkgname=%PACKAGE_NAME% ^
-            -Dcode.review.pkgprefix=%ISCCR_PACKAGE_PREFIX% ^
-            -Dcode.review.folder-prefix=%ISCCR_FOLDER_PREFIX% ^
-            -Dcode.review.directory="%CHECKOUT_DIR%\%PACKAGE_NAME%"
+          echo Environment Variables set.
+          echo.
+          echo Target Environment  : %TARGET_ENVIRONMENT%
+          echo IS Packages         : %ISPACKAGES_LIST%
+          echo IS Group Alias      : %TARGET_ISGROUP_ALIAS%
+          echo Checkout Directory  : %CHECKOUT_DIR%
+          echo Has Adapter Package : %HAS_ADAPTERPKG%
+          echo Adapter Config      : %ADAPTER_CONFIGPKG%
+          echo Execute WM Test     : %EXECUTE_WMTEST%
+          echo Build Number        : %MAIN_BUILDNUMBER%
+          echo Repository Branch   : %REPO_BRANCH_NAME%
+          echo.
+          echo JAVA_HOME           : %JAVA_HOME%
+          echo SAG_BUILD_HOME      : %SAG_BUILD_HOME%
+          echo CICD_HOME           : %CICD_HOME%
+
+
+      # ==========================================================
+      # 3. Verify Java / Ant / Git
+      # ==========================================================
+
+      - name: Verify Build Environment
+        shell: cmd
+        run: |
+
+          echo ===== Java =====
+          "%JAVA_HOME%\bin\java.exe" -version
 
           echo.
-          echo ISCCR Exit Code: %ERRORLEVEL%
-          echo ISCCR is non-blocking.
+          echo ===== Git =====
+          git --version
 
-      # =========================================================
-      # 8. Evaluate ISCCR - informational
-      # =========================================================
-      - name: Evaluate ISCCR Result
-        if: always() && env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          if (-not (Test-Path -LiteralPath $env:ISCCR_LOG)) {
-              Write-Warning "ISCCR log not found: $env:ISCCR_LOG"
-              exit 0
-          }
+          echo.
+          echo ===== Ant =====
+          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" -version
 
-          $content = Get-Content -LiteralPath $env:ISCCR_LOG -Raw
-          $match = [regex]::Match($content, 'CODE REVIEW STATUS - (PASS|WARNING|FAILED)')
+          echo.
+          echo ===== Checkout =====
+          dir C:\test
 
-          if ($match.Success) {
-              Write-Host "ISCCR Status: $($match.Groups[1].Value)"
-          }
-          else {
-              Write-Warning "ISCCR status not found."
-          }
 
-      # =========================================================
-      # 9. Prepare ABE output directory - deploy only
-      # =========================================================
-      - name: Prepare ABE Output Directory
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          if (-not (Test-Path -LiteralPath $env:BUILD_OUTPUT_DIR)) {
-              New-Item -ItemType Directory -Path $env:BUILD_OUTPUT_DIR -Force | Out-Null
-          }
+      # ==========================================================
+      # 4. Build
+      # ==========================================================
 
-          Write-Host "ABE output directory: $env:BUILD_OUTPUT_DIR"
-
-      # =========================================================
-      # 10. ABE Build - deploy only
-      # =========================================================
-      - name: ABE Build
-        if: env.DEPLOYMENT_ACTION == 'deploy'
+      - name: Build
         shell: cmd
         run: |
-          echo ============================================
-          echo ABE BUILD
-          echo ============================================
-          echo ABE_HOME=%ABE_HOME%
-          echo ABE_MASTER_BUILD=%ABE_MASTER_BUILD%
-          echo ANT_HOME=%ANT_HOME%
-          echo CHECKOUT_DIR=%CHECKOUT_DIR%
-          echo BUILD_OUTPUT_DIR=%BUILD_OUTPUT_DIR%
-          echo PACKAGE_NAME=%PACKAGE_NAME%
-          echo TARGET_ENVIRONMENT=%TARGET_ENVIRONMENT%
-          echo TARGET_ISGROUP_ALIAS=%TARGET_ISGROUP_ALIAS%
-          echo BUILD_NAME=%BUILD_NAME%
 
-          call "%ANT_HOME%\bin\ant.bat" ^
+          echo ==========================================
+          echo Build Step
+          echo ==========================================
+
+          echo "%SAG_BUILD_HOME%\common\lib\ant\bin\ant" ^
             -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
             -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
             -DtargetEnv="%TARGET_ENVIRONMENT%" ^
-            -DSAGHome="%SAG_HOME%" ^
-            -DprojectName="%BUILD_NAME%" ^
-            -f "%ABE_MASTER_BUILD%" ^
+            -DSAGHome="%SAG_BUILD_HOME%" ^
+            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
+            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
+            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
             build
 
-          set "ABE_EXIT_CODE=%ERRORLEVEL%"
+          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant" ^
+            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
+            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
+            -DtargetEnv="%TARGET_ENVIRONMENT%" ^
+            -DSAGHome="%SAG_BUILD_HOME%" ^
+            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
+            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
+            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+            build
 
-          echo.
-          echo ABE Exit Code: %ABE_EXIT_CODE%
 
-          if not "%ABE_EXIT_CODE%"=="0" (
-              echo ERROR: ABE Build failed.
-              exit /b %ABE_EXIT_CODE%
-          )
+      # ==========================================================
+      # 5. Create Deployment Project
+      # ==========================================================
 
-          echo ABE Build completed successfully.
-
-      # =========================================================
-      # 11. Verify ABE deployment artifact - deploy only
-      # =========================================================
-      - name: Verify ABE Deployment Artifact
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          $artifact = Join-Path $env:ABE_IS_OUTPUT_DIR $env:COMPOSITE_NAME
-
-          if (-not (Test-Path -LiteralPath $artifact)) {
-              Write-Error "Expected deployment artifact not found: $artifact"
-              Get-ChildItem -LiteralPath $env:ABE_IS_OUTPUT_DIR -Force -ErrorAction SilentlyContinue
-              exit 1
-          }
-
-          Write-Host "Deployment artifact found: $artifact"
-
-      # =========================================================
-      # 12. Validate dependency configuration - deploy only
-      # =========================================================
-      - name: Validate Dependency Configuration
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          [xml]$xml = Get-Content -LiteralPath $env:PROJECT_AUTOMATOR_XML
-          $project = $xml.DeployerSpec.Projects.Project
-
-          if ($null -eq $project) {
-              Write-Error "Project definition not found in ProjectAutomator.xml"
-              exit 1
-          }
-
-          Write-Host "Project: $($project.name)"
-          Write-Host "ignoreMissingDependencies: $($project.ignoreMissingDependencies)"
-
-          if ($project.ignoreMissingDependencies -ne 'false') {
-              Write-Error 'ProjectAutomator.xml must use ignoreMissingDependencies="false" for a blocking dependency check.'
-              exit 1
-          }
-
-          Write-Host "Missing dependency checking is configured as blocking."
-
-      # =========================================================
-      # 13. Validate Project Automator
-      # =========================================================
-      - name: Validate Project Automator
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR)) {
-              Write-Error "ProjectAutomator.bat not found."
-              exit 1
-          }
-
-          if (-not (Test-Path -LiteralPath $env:PROJECT_AUTOMATOR_XML)) {
-              Write-Error "ProjectAutomator.xml not found."
-              exit 1
-          }
-
-          Write-Host "ProjectAutomator.bat : FOUND"
-          Write-Host "ProjectAutomator.xml : FOUND"
-
-      # =========================================================
-      # 14. Validate connectivity - deploy and rollback
-      # =========================================================
-      - name: Validate Deployment Connectivity
-        if: always()
-        shell: powershell
-        run: |
-          $deployer = Test-NetConnection `
-            -ComputerName $env:DEPLOYER_HOST `
-            -Port ([int]$env:DEPLOYER_PORT) `
-            -WarningAction SilentlyContinue
-
-          if (-not $deployer.TcpTestSucceeded) {
-              Write-Error "Deployer server is not reachable: $env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
-              exit 1
-          }
-
-          Write-Host "Deployer server connectivity: OK"
-
-          $target = Test-NetConnection `
-            -ComputerName $env:TARGET_IS_HOST `
-            -Port ([int]$env:TARGET_IS_PORT) `
-            -WarningAction SilentlyContinue
-
-          if (-not $target.TcpTestSucceeded) {
-              Write-Error "Target Integration Server is not reachable: $env:TARGET_IS_HOST`:$env:TARGET_IS_PORT"
-              exit 1
-          }
-
-          Write-Host "Target Integration Server connectivity: OK"
-
-      # =========================================================
-      # 15. Create deployment project - deploy only
-      # =========================================================
       - name: Create Deployment Project
-        if: env.DEPLOYMENT_ACTION == 'deploy'
         shell: cmd
         run: |
-          echo ============================================
-          echo CREATE DEPLOYMENT PROJECT
-          echo ============================================
 
-          echo Project Automator:
-          echo %PROJECT_AUTOMATOR%
-          echo.
-          echo Project XML:
-          echo %PROJECT_AUTOMATOR_XML%
-          echo.
-          echo Deployer Server:
-          echo %DEPLOYER_HOST%:%DEPLOYER_PORT%
-          echo.
-          echo Target Integration Server:
-          echo %TARGET_IS_HOST%:%TARGET_IS_PORT%
-          echo.
-          echo Project:
-          echo %DEPLOYMENT_PROJECT%
-          echo.
-          echo Deployment Candidate:
-          echo %DEPLOYMENT_CONTROL%
+          echo ==========================================
+          echo Deployment Project Creation
+          echo ==========================================
 
-          call "%PROJECT_AUTOMATOR%" "%PROJECT_AUTOMATOR_XML%" ^
-            > "%RUNNER_TEMP%\project_automator.log" 2>&1
+          echo Deployment Project creation step
 
-          set "PA_EXIT_CODE=%ERRORLEVEL%"
 
-          type "%RUNNER_TEMP%\project_automator.log"
+      # ==========================================================
+      # 6. Variable Substitution
+      # ==========================================================
 
-          echo.
-          echo Project Automator Exit Code: %PA_EXIT_CODE%
-
-          if not "%PA_EXIT_CODE%"=="0" (
-              echo ERROR: Project Automator failed.
-              exit /b %PA_EXIT_CODE%
-          )
-
-      # =========================================================
-      # 16. Verify deployment project - deploy only
-      # =========================================================
-      - name: Verify Deployment Project
-        if: env.DEPLOYMENT_ACTION == 'deploy'
+      - name: Variable Substitution
         shell: cmd
         run: |
-          call "%DEPLOYER_CMD%" ^
-            --list ^
-            -candidate project ^
-            -host "%DEPLOYER_HOST%" ^
-            -port "%DEPLOYER_PORT%" ^
-            -user "%DEPLOYER_USER%" ^
-            -pwd "%DEPLOYER_PASSWORD%" ^
-            > "%RUNNER_TEMP%\deployer_projects.txt" 2>&1
 
-          set "EXIT_CODE=%ERRORLEVEL%"
+          echo ==========================================
+          echo Variable Substitution
+          echo ==========================================
 
-          type "%RUNNER_TEMP%\deployer_projects.txt"
+          echo Variable Substitution step
 
-          echo.
-          echo List Project Exit Code: %EXIT_CODE%
 
-          if not "%EXIT_CODE%"=="0" (
-              echo ERROR: Unable to list Deployer projects.
-              exit /b %EXIT_CODE%
-          )
+      # ==========================================================
+      # 7. Deploy
+      # ==========================================================
 
-          findstr /I /C:"%DEPLOYMENT_PROJECT%" "%RUNNER_TEMP%\deployer_projects.txt" >nul
-
-          if errorlevel 1 (
-              echo ERROR: Project "%DEPLOYMENT_PROJECT%" not found on Deployer.
-              exit /b 1
-          )
-
-          echo Project exists: %DEPLOYMENT_PROJECT%
-
-      # =========================================================
-      # 17. Verify deployment candidate - deploy only
-      # =========================================================
-      - name: Verify Deployment Candidate
-        if: env.DEPLOYMENT_ACTION == 'deploy'
+      - name: Deploy
         shell: cmd
         run: |
-          call "%DEPLOYER_CMD%" ^
-            --list ^
-            -candidate dc ^
-            -project "%DEPLOYMENT_PROJECT%" ^
-            -host "%DEPLOYER_HOST%" ^
-            -port "%DEPLOYER_PORT%" ^
-            -user "%DEPLOYER_USER%" ^
-            -pwd "%DEPLOYER_PASSWORD%" ^
-            > "%RUNNER_TEMP%\deployment_candidates.txt" 2>&1
 
-          set "EXIT_CODE=%ERRORLEVEL%"
+          echo ==========================================
+          echo Deployment
+          echo ==========================================
 
-          type "%RUNNER_TEMP%\deployment_candidates.txt"
+          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" ^
+            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
+            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
+            -DSAGHome="%SAG_BUILD_HOME%" ^
+            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
+            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
+            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+            deploy
 
-          echo.
-          echo List DC Exit Code: %EXIT_CODE%
 
-          if not "%EXIT_CODE%"=="0" (
-              echo ERROR: Unable to list deployment candidates.
-              exit /b %EXIT_CODE%
-          )
+      # ==========================================================
+      # 8. Deploy Adapter Configuration
+      # ==========================================================
 
-          findstr /I /C:"%DEPLOYMENT_CONTROL%" "%RUNNER_TEMP%\deployment_candidates.txt" >nul
-
-          if errorlevel 1 (
-              echo ERROR: Deployment candidate "%DEPLOYMENT_CONTROL%" not found.
-              exit /b 1
-          )
-
-          echo Deployment candidate exists: %DEPLOYMENT_CONTROL%
-
-      # =========================================================
-      # 18. Simulate deployment - deploy only
-      # =========================================================
-      - name: Simulate Deployment
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: cmd
-        run: |
-          echo ============================================
-          echo DEPLOYMENT SIMULATION
-          echo ============================================
-
-          call "%DEPLOYER_CMD%" ^
-            --simulate ^
-            -dc "%DEPLOYMENT_CONTROL%" ^
-            -project "%DEPLOYMENT_PROJECT%" ^
-            -host "%DEPLOYER_HOST%" ^
-            -port "%DEPLOYER_PORT%" ^
-            -user "%DEPLOYER_USER%" ^
-            -pwd "%DEPLOYER_PASSWORD%" ^
-            -reportFilePath "%RUNNER_TEMP%\DeploymentSimulationReport.xml" ^
-            > "%RUNNER_TEMP%\deployment_simulation.log" 2>&1
-
-          set "EXIT_CODE=%ERRORLEVEL%"
-
-          type "%RUNNER_TEMP%\deployment_simulation.log"
-
-          echo.
-          echo Simulation Exit Code: %EXIT_CODE%
-
-          if not "%EXIT_CODE%"=="0" (
-              echo ERROR: Deployment simulation failed.
-              exit /b %EXIT_CODE%
-          )
-
-          echo Deployment simulation passed.
-
-      # =========================================================
-      # 19. Actual deployment - deploy only
-      # =========================================================
-      - name: Deploy to Target Integration Server
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: cmd
-        run: |
-          echo ============================================
-          echo WEBMETHODS DEPLOYMENT
-          echo ============================================
-
-          echo Deployer Server: %DEPLOYER_HOST%:%DEPLOYER_PORT%
-          echo Target IS: %TARGET_IS_HOST%:%TARGET_IS_PORT%
-          echo Project: %DEPLOYMENT_PROJECT%
-          echo Candidate: %DEPLOYMENT_CONTROL%
-
-          call "%DEPLOYER_CMD%" ^
-            --deploy ^
-            -dc "%DEPLOYMENT_CONTROL%" ^
-            -project "%DEPLOYMENT_PROJECT%" ^
-            -host "%DEPLOYER_HOST%" ^
-            -port "%DEPLOYER_PORT%" ^
-            -user "%DEPLOYER_USER%" ^
-            -pwd "%DEPLOYER_PASSWORD%" ^
-            -reportFilePath "%RUNNER_TEMP%\DeploymentReport.xml" ^
-            -force ^
-            > "%RUNNER_TEMP%\deployer_deploy.log" 2>&1
-
-          set "EXIT_CODE=%ERRORLEVEL%"
-
-          type "%RUNNER_TEMP%\deployer_deploy.log"
-
-          echo.
-          echo Deployer Exit Code: %EXIT_CODE%
-
-          if not "%EXIT_CODE%"=="0" (
-              echo ERROR: WebMethods deployment failed.
-              exit /b %EXIT_CODE%
-          )
-
-          echo ============================================
-          echo DEPLOYMENT SUCCESSFUL
-          echo ============================================
-
-      # =========================================================
-      # 20. Verify target IS after deployment
-      # =========================================================
-      - name: Verify Target Integration Server
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          $target = Test-NetConnection `
-            -ComputerName $env:TARGET_IS_HOST `
-            -Port ([int]$env:TARGET_IS_PORT) `
-            -WarningAction SilentlyContinue
-
-          if (-not $target.TcpTestSucceeded) {
-              Write-Error "Target Integration Server is not reachable after deployment."
-              exit 1
-          }
-
-          Write-Host "Target Integration Server is reachable."
-
-      # =========================================================
-      # 21. Rollback
-      # =========================================================
-      - name: Rollback Deployment
-        if: env.DEPLOYMENT_ACTION == 'rollback'
-        shell: cmd
-        run: |
-          echo ============================================
-          echo WEBMETHODS ROLLBACK
-          echo ============================================
-
-          echo Deployer Server: %DEPLOYER_HOST%:%DEPLOYER_PORT%
-          echo Target IS: %TARGET_IS_HOST%:%TARGET_IS_PORT%
-          echo Project: %DEPLOYMENT_PROJECT%
-          echo Candidate: %DEPLOYMENT_CONTROL%
-
-          echo.
-          echo Starting rollback...
-
-          call "%DEPLOYER_CMD%" ^
-            --rollback ^
-            -dc "%DEPLOYMENT_CONTROL%" ^
-            -project "%DEPLOYMENT_PROJECT%" ^
-            -host "%DEPLOYER_HOST%" ^
-            -port "%DEPLOYER_PORT%" ^
-            -user "%DEPLOYER_USER%" ^
-            -pwd "%DEPLOYER_PASSWORD%" ^
-            -reportFilePath "%RUNNER_TEMP%\RollbackReport.xml" ^
-            > "%RUNNER_TEMP%\deployer_rollback.log" 2>&1
-
-          set "ROLLBACK_EXIT_CODE=%ERRORLEVEL%"
-
-          type "%RUNNER_TEMP%\deployer_rollback.log"
-
-          echo.
-          echo Rollback Exit Code: %ROLLBACK_EXIT_CODE%
-
-          if not "%ROLLBACK_EXIT_CODE%"=="0" (
-              echo ERROR: WebMethods rollback failed.
-              exit /b %ROLLBACK_EXIT_CODE%
-          )
-
-          echo ============================================
-          echo ROLLBACK SUCCESSFUL
-          echo ============================================
-
-      # =========================================================
-      # 22. Adapter configuration - deploy only
-      # =========================================================
       - name: Deploy Adapter Configuration
-        if: env.DEPLOYMENT_ACTION == 'deploy' && env.HAS_ADAPTERPKG == 'true'
+        if: ${{ inputs.hasAdapterPackage == true }}
         shell: powershell
         run: |
-          Write-Host "============================================"
-          Write-Host "ADAPTER CONFIGURATION"
-          Write-Host "============================================"
-          Write-Host "Target IS Group: $env:TARGET_ISGROUP_ALIAS"
-          Write-Host "Adapter Config Package: $env:ADAPTER_CONFIGPKG"
-          Write-Host "Repository Branch: $env:REPO_BRANCH_NAME"
-          Write-Warning "The original Jenkins downstream adapter job still needs to be migrated."
 
-      # =========================================================
-      # 23. Integration Test Suite - deploy only
-      # =========================================================
-      - name: Integration Test Suite
-        if: env.DEPLOYMENT_ACTION == 'deploy' && env.EXECUTE_WMTEST == 'true'
-        shell: powershell
+          Write-Host "=========================================="
+          Write-Host "Deploy Adapter Configuration"
+          Write-Host "=========================================="
+
+          Write-Host "Target IS Group : $env:TARGET_ISGROUP_ALIAS"
+          Write-Host "Config Package  : $env:ADAPTER_CONFIGPKG"
+          Write-Host "Branch          : $env:REPO_BRANCH_NAME"
+
+          # Add the adapter deployment command here.
+          #
+          # This replaces the Jenkins downstream job:
+          #
+          # sagdevops-cicd-manage-configs/adapters/
+          # sagdevops-cicd-checkout-adaptersconfig
+
+          Write-Host "Adapter deployment step"
+
+
+      # ==========================================================
+      # 9. Optional WM Test Suite
+      # ==========================================================
+
+      - name: Execute WM Test Suite
+        if: ${{ inputs.executeWmTestSuite == true }}
+        shell: cmd
         run: |
-          Write-Host "============================================"
-          Write-Host "WEBMETHODS INTEGRATION TEST SUITE"
-          Write-Host "============================================"
-          Write-Warning "The original wmtestsuite buildTest.xml location has not yet been confirmed on this runner."
 
-      # =========================================================
-      # 24. Postman - deploy only
-      # =========================================================
-      - name: Postman Unit Tests
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          Write-Host "Postman Unit Tests stage."
+          echo ==========================================
+          echo WebMethods Test Suite
+          echo ==========================================
 
-      # =========================================================
-      # 25. SonarScanner - deploy only
-      # =========================================================
-      - name: SonarScanner Code Review
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          Write-Host "SonarScanner Code Review stage."
-
-      # =========================================================
-      # 26. JMeter - deploy only
-      # =========================================================
-      - name: JMeter Performance Test
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          Write-Host "JMeter Performance Test stage."
-
-      # =========================================================
-      # 27. SOAPUI - deploy only
-      # =========================================================
-      - name: SOAPUI Tests
-        if: env.DEPLOYMENT_ACTION == 'deploy'
-        shell: powershell
-        run: |
-          Write-Host "SOAPUI Tests stage."
-
-      # =========================================================
-      # 28. Store reports
-      #
-      # Always runs for deploy and rollback.
-      # =========================================================
-      - name: Store Reports
-        if: always()
-        shell: powershell
-        run: |
-          Write-Host "============================================"
-          Write-Host "STORE CI/CD REPORTS"
-          Write-Host "============================================"
-
-          $reportRoot = $env:REPORT_DIR
-          $runReportDir = Join-Path $reportRoot "Run_$env:GITHUB_RUN_NUMBER"
-
-          if (-not (Test-Path -LiteralPath $reportRoot)) {
-              New-Item -ItemType Directory -Path $reportRoot -Force | Out-Null
-          }
-
-          if (Test-Path -LiteralPath $runReportDir) {
-              Remove-Item -LiteralPath $runReportDir -Recurse -Force
-          }
-
-          New-Item -ItemType Directory -Path $runReportDir -Force | Out-Null
-
-          function Copy-ReportIfExists {
-              param(
-                  [string]$Source,
-                  [string]$DestinationName
-              )
-
-              if (Test-Path -LiteralPath $Source) {
-                  Copy-Item -LiteralPath $Source -Destination (Join-Path $runReportDir $DestinationName) -Force
-                  Write-Host "Copied: $Source"
-              }
-          }
-
-          Copy-ReportIfExists $env:ISCCR_LOG 'ISCCR.log'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'project_automator.log') 'ProjectAutomator.log'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployer_projects.txt') 'DeployerProjects.txt'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployment_candidates.txt') 'DeploymentCandidates.txt'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployment_simulation.log') 'DeploymentSimulation.log'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'DeploymentSimulationReport.xml') 'DeploymentSimulationReport.xml'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployer_deploy.log') 'DeployerDeployment.log'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'DeploymentReport.xml') 'DeploymentReport.xml'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'deployer_rollback.log') 'DeployerRollback.log'
-          Copy-ReportIfExists (Join-Path $env:RUNNER_TEMP 'RollbackReport.xml') 'RollbackReport.xml'
-
-          $summaryFile = Join-Path $runReportDir 'EnvironmentSummary.txt'
-
-          $summaryLines = @(
-              'WEBMETHODS CI/CD REPORT'
-              '======================='
-              ''
-              "Repository: $env:GITHUB_REPOSITORY"
-              "Branch: $env:REPO_BRANCH_NAME"
-              "Commit: $env:GITHUB_SHA"
-              "Run Number: $env:GITHUB_RUN_NUMBER"
-              "Runner: $env:RUNNER_NAME"
-              "Computer: $env:COMPUTERNAME"
-              "Config File: $env:CONFIG_FILE"
-              "Deployment Action: $env:DEPLOYMENT_ACTION"
-              "Package: $env:PACKAGE_NAME"
-              "Target Environment: $env:TARGET_ENVIRONMENT"
-              "Target IS Group: $env:TARGET_ISGROUP_ALIAS"
-              "Build Number: $env:MAIN_BUILDNUMBER"
-              "Build Name: $env:BUILD_NAME"
-              "Checkout Directory: $env:CHECKOUT_DIR"
-              "Build Output: $env:BUILD_OUTPUT_DIR"
-              "ABE Master Build: $env:ABE_MASTER_BUILD"
-              "Deployer Server: $env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
-              "Target Integration Server: $env:TARGET_IS_HOST`:$env:TARGET_IS_PORT"
-              "Deployment Project: $env:DEPLOYMENT_PROJECT"
-              "Deployment Candidate: $env:DEPLOYMENT_CONTROL"
-              "Report Directory: $runReportDir"
-          )
-
-          $summaryLines | Set-Content -LiteralPath $summaryFile -Encoding UTF8
-
-          $zipFile = Join-Path $reportRoot "WebMethods_CICD_Run_$env:GITHUB_RUN_NUMBER.zip"
-
-          if (Test-Path -LiteralPath $zipFile) {
-              Remove-Item -LiteralPath $zipFile -Force
-          }
-
-          Compress-Archive `
-            -Path (Join-Path $runReportDir '*') `
-            -DestinationPath $zipFile `
-            -Force
-
-          Write-Host ""
-          Write-Host "Reports stored in: $runReportDir"
-          Write-Host "ZIP report: $zipFile"
-
-          Get-ChildItem -LiteralPath $runReportDir -Recurse -Force
-
-      # =========================================================
-      # 29. Final summary
-      # =========================================================
-      - name: Final Environment Summary
-        if: always()
-        shell: powershell
-        run: |
-          Write-Host "============================================"
-          Write-Host "WEBMETHODS CI/CD SUMMARY"
-          Write-Host "============================================"
-          Write-Host "Runner              : $env:RUNNER_NAME"
-          Write-Host "Config File         : $env:CONFIG_FILE"
-          Write-Host "Deployment Action   : $env:DEPLOYMENT_ACTION"
-          Write-Host "Package             : $env:PACKAGE_NAME"
-          Write-Host "Build Number        : $env:MAIN_BUILDNUMBER"
-          Write-Host "Build Name          : $env:BUILD_NAME"
-          Write-Host "Target IS Group     : $env:TARGET_ISGROUP_ALIAS"
-          Write-Host "Deployer Server     : $env:DEPLOYER_HOST`:$env:DEPLOYER_PORT"
-          Write-Host "Target IS           : $env:TARGET_IS_HOST`:$env:TARGET_IS_PORT"
-          Write-Host "Deployment Project  : $env:DEPLOYMENT_PROJECT"
-          Write-Host "Deployment Candidate: $env:DEPLOYMENT_CONTROL"
-          Write-Host "Reports             : $env:REPORT_DIR"
-          Write-Host "============================================"
+          echo Execute WM Test Suite
