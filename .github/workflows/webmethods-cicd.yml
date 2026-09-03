@@ -12,7 +12,7 @@ on:
         description: "WebMethods Package Name"
         required: true
         type: string
-        default: "ThermoDemoPackage1"
+        default: "cicdDemo"
       targetISGroupAlias:
         description: "Target IS Group Alias"
         required: true
