@@ -197,33 +197,129 @@ jobs:
           Write-Host "All required WebMethods tools found."
       # =====================================================
       # 5. Prepare checkout directory
+      #
+      # Repository layout:
+      #   <repo>\is\packages\<PackageName>
+      #
+      # The WebMethods CHECKOUT_DIR points to:
+      #   C:\SoftwareAG\tools\Checkout\is\packages
+      #
+      # Therefore copy the CONTENTS of the repository
+      # is\packages directory into CHECKOUT_DIR. Do not copy
+      # the entire repository root, otherwise we create:
+      #   ...\is\packages\is\packages\<PackageName>
       # =====================================================
       - name: Prepare WebMethods Checkout Directory
         shell: powershell
         run: |
-          $source = $env:GITHUB_WORKSPACE
+          $ErrorActionPreference = "Stop"
+
+          $repositoryRoot = $env:GITHUB_WORKSPACE
           $destination = $env:CHECKOUT_DIR
+          $sourcePackageRoot = Join-Path $repositoryRoot "is\packages"
+
+          Write-Host "============================================"
+          Write-Host "PREPARE WEBMETHODS CHECKOUT DIRECTORY"
+          Write-Host "============================================"
+
+          Write-Host "GitHub Workspace     : $repositoryRoot"
+          Write-Host "Package Source Root  : $sourcePackageRoot"
+          Write-Host "WebMethods Checkout  : $destination"
+          Write-Host "Package Name         : $env:PACKAGE_NAME"
+
+          if (-not (Test-Path -LiteralPath $repositoryRoot)) {
+            Write-Error "GitHub workspace not found: $repositoryRoot"
+            exit 1
+          }
+
+          if (-not (Test-Path -LiteralPath $sourcePackageRoot)) {
+            Write-Error "Repository package root not found: $sourcePackageRoot"
+            Write-Host ""
+            Write-Host "Repository root contents:"
+            Get-ChildItem -LiteralPath $repositoryRoot -Force |
+              Select-Object Mode, Name, FullName
+            exit 1
+          }
+
           if (-not (Test-Path -LiteralPath $destination)) {
             New-Item -ItemType Directory -Path $destination -Force | Out-Null
           }
+
+          Write-Host ""
+          Write-Host "Cleaning previous WebMethods package checkout..."
+
           Get-ChildItem -LiteralPath $destination -Force |
             Remove-Item -Recurse -Force -ErrorAction Stop
-          Get-ChildItem -LiteralPath $source -Force |
-            Where-Object { $_.Name -ne '.git' } |
+
+          Write-Host ""
+          Write-Host "Copying package directories from repository..."
+
+          Get-ChildItem -LiteralPath $sourcePackageRoot -Force |
             Copy-Item -Destination $destination -Recurse -Force -ErrorAction Stop
-          Write-Host "Repository copied to $destination"
+
+          Write-Host ""
+          Write-Host "WebMethods checkout contents:"
+
+          Get-ChildItem -LiteralPath $destination -Force |
+            Select-Object Mode, Name, FullName
+
+          $packagePath = Join-Path $destination $env:PACKAGE_NAME
+
+          Write-Host ""
+          Write-Host "Expected package path:"
+          Write-Host $packagePath
+
+          if (-not (Test-Path -LiteralPath $packagePath)) {
+            Write-Error "Package was not copied to expected WebMethods checkout path: $packagePath"
+            Write-Host ""
+            Write-Host "Available package directories:"
+
+            Get-ChildItem -LiteralPath $destination -Directory -Force |
+              Select-Object Name, FullName
+
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "Package copied successfully: $packagePath"
+
       # =====================================================
       # 6. Verify package
       # =====================================================
       - name: Verify WebMethods Package
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
+
           $packagePath = Join-Path $env:CHECKOUT_DIR $env:PACKAGE_NAME
-          if (-not (Test-Path -LiteralPath $packagePath)) {
-            Write-Error "WebMethods package not found: $packagePath"
+
+          Write-Host "============================================"
+          Write-Host "VERIFY WEBMETHODS PACKAGE"
+          Write-Host "============================================"
+
+          Write-Host "Package Name : $env:PACKAGE_NAME"
+          Write-Host "Package Path : $packagePath"
+
+          if ([string]::IsNullOrWhiteSpace($env:PACKAGE_NAME)) {
+            Write-Error "PACKAGE_NAME is empty."
             exit 1
           }
-          Write-Host "Package found: $packagePath"
+
+          if (-not (Test-Path -LiteralPath $packagePath)) {
+            Write-Error "WebMethods package not found: $packagePath"
+
+            Write-Host ""
+            Write-Host "Available directories in CHECKOUT_DIR:"
+
+            Get-ChildItem -LiteralPath $env:CHECKOUT_DIR -Directory -Force |
+              Select-Object Name, FullName
+
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "Package found successfully."
+          Write-Host $packagePath
       # =====================================================
       # 7. ISCCR - non-blocking
       # =====================================================
