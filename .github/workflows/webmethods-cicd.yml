@@ -76,7 +76,7 @@ jobs:
       ABE_MASTER_BUILD: 'C:\SoftwareAG11_ABE\common\AssetBuildEnvironment\master_build\build.xml'
 
       # WebMethods checkout
-      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout'
+      CHECKOUT_DIR: 'C:\SoftwareAG\tools\Checkout\is\packages'
 
       # ABE build output / Deployer repository
       BUILD_OUTPUT_DIR: 'C:\SoftwareAG\tools\Build'
@@ -106,7 +106,7 @@ jobs:
       TARGET_IS_PORT: '5551'
 
       # Confirmed Deployer project/candidate names
-      DEPLOYMENT_PROJECT: 'MyFirstCICD_Deploy1MyFirstCICD_Deploy1'
+      DEPLOYMENT_PROJECT: 'CR_Thermo_01'
       DEPLOYMENT_CONTROL: 'myDeployment'
 
       # ProjectAutomator.xml source repository
@@ -196,34 +196,138 @@ jobs:
           }
           Write-Host "All required WebMethods tools found."
       # =====================================================
-      # 5. Prepare checkout directory
+      # =====================================================
+      # 5. Prepare WebMethods checkout directory
+      #
+      # GitHub repository structure:
+      # <repo-root>\is\packages\
+      #
+      # WebMethods checkout directory:
+      # C:\SoftwareAG\tools\Checkout\is\packages
+      #
+      # Only the contents of the repository's is\packages
+      # directory are copied. This prevents:
+      # C:\SoftwareAG\tools\Checkout\is\packages\is\packages
       # =====================================================
       - name: Prepare WebMethods Checkout Directory
         shell: powershell
         run: |
-          $source = $env:GITHUB_WORKSPACE
+          $ErrorActionPreference = "Stop"
+
+          $source = Join-Path $env:GITHUB_WORKSPACE "is\packages"
           $destination = $env:CHECKOUT_DIR
-          if (-not (Test-Path -LiteralPath $destination)) {
-            New-Item -ItemType Directory -Path $destination -Force | Out-Null
+
+          Write-Host "============================================"
+          Write-Host "PREPARE WEBMETHODS CHECKOUT DIRECTORY"
+          Write-Host "============================================"
+
+          Write-Host "GitHub repository root:"
+          Write-Host $env:GITHUB_WORKSPACE
+
+          Write-Host ""
+          Write-Host "Package source:"
+          Write-Host $source
+
+          Write-Host ""
+          Write-Host "WebMethods checkout directory:"
+          Write-Host $destination
+
+          if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+              Write-Error "WebMethods package source directory not found:"
+              Write-Error $source
+              exit 1
           }
-          Get-ChildItem -LiteralPath $destination -Force |
-            Remove-Item -Recurse -Force -ErrorAction Stop
-          Get-ChildItem -LiteralPath $source -Force |
-            Where-Object { $_.Name -ne '.git' } |
-            Copy-Item -Destination $destination -Recurse -Force -ErrorAction Stop
-          Write-Host "Repository copied to $destination"
+
+          if (-not (Test-Path -LiteralPath $destination -PathType Container)) {
+              Write-Host ""
+              Write-Host "Creating checkout directory..."
+              New-Item `
+                -ItemType Directory `
+                -Path $destination `
+                -Force | Out-Null
+          }
+
+          Write-Host ""
+          Write-Host "Cleaning previous WebMethods packages..."
+
+          Get-ChildItem `
+            -LiteralPath $destination `
+            -Force |
+            Remove-Item `
+              -Recurse `
+              -Force `
+              -ErrorAction Stop
+
+          Write-Host ""
+          Write-Host "Copying contents of repository is\packages..."
+
+          Get-ChildItem `
+            -LiteralPath $source `
+            -Force |
+            Copy-Item `
+              -Destination $destination `
+              -Recurse `
+              -Force `
+              -ErrorAction Stop
+
+          Write-Host ""
+          Write-Host "WebMethods checkout prepared successfully."
+
+          Write-Host ""
+          Write-Host "Contents of:"
+          Write-Host $destination
+
+          Get-ChildItem `
+            -LiteralPath $destination `
+            -Force |
+            Select-Object Mode, Name, FullName
+
+
       # =====================================================
       # 6. Verify package
       # =====================================================
       - name: Verify WebMethods Package
         shell: powershell
         run: |
-          $packagePath = Join-Path $env:CHECKOUT_DIR $env:PACKAGE_NAME
-          if (-not (Test-Path -LiteralPath $packagePath)) {
-            Write-Error "WebMethods package not found: $packagePath"
-            exit 1
+          $ErrorActionPreference = "Stop"
+
+          $packagePath = Join-Path `
+            $env:CHECKOUT_DIR `
+            $env:PACKAGE_NAME
+
+          Write-Host "============================================"
+          Write-Host "VERIFY WEBMETHODS PACKAGE"
+          Write-Host "============================================"
+
+          Write-Host "Package Name:"
+          Write-Host $env:PACKAGE_NAME
+
+          Write-Host ""
+          Write-Host "Expected Package Path:"
+          Write-Host $packagePath
+
+          if (-not (Test-Path -LiteralPath $packagePath -PathType Container)) {
+              Write-Error "WebMethods package not found:"
+              Write-Error $packagePath
+
+              Write-Host ""
+              Write-Host "Available packages in:"
+              Write-Host $env:CHECKOUT_DIR
+
+              Get-ChildItem `
+                -LiteralPath $env:CHECKOUT_DIR `
+                -Directory `
+                -Force |
+                Select-Object Name, FullName
+
+              exit 1
           }
-          Write-Host "Package found: $packagePath"
+
+          Write-Host ""
+          Write-Host "Package found successfully:"
+          Write-Host $packagePath
+
+
       # =====================================================
       # 7. ISCCR - non-blocking
       # =====================================================
