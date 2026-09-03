@@ -1,0 +1,270 @@
+name: ThermoFisher WebMethods CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+
+      targetEnvironment:
+        description: "Target Environment"
+        required: true
+        type: string
+
+      packageName:
+        description: "IS Packages to deploy"
+        required: true
+        type: string
+
+      targetISGroupAlias:
+        description: "Target IS Group Alias"
+        required: true
+        type: string
+
+      buildNumber:
+        description: "Main Build Number"
+        required: true
+        type: string
+
+      hasAdapterPackage:
+        description: "Has Adapter Package"
+        required: true
+        type: boolean
+        default: false
+
+      adapterConfigPackage:
+        description: "Adapter Config Package"
+        required: false
+        type: string
+        default: ""
+
+      RepoBranchName:
+        description: "Repository Branch"
+        required: true
+        type: string
+        default: "main"
+
+      executeWmTestSuite:
+        description: "Execute WM Test Suite"
+        required: true
+        type: boolean
+        default: false
+
+
+jobs:
+
+  ibm-cicd:
+
+    # This job runs on your existing Windows machine
+    runs-on:
+      - self-hosted
+      - my-laptop
+
+    env:
+
+      CICD_HOME: "C:/devops/sagdevops-cicd"
+      SAG_BUILD_HOME: "C:/SoftwareAG11_ABE"
+      SAG_HOME: "C:/SoftwareAG11"
+      ANT_HOME: "C:/SoftwareAG11_ABE/common/lib/ant"
+      JAVA_HOME: "C:/SoftwareAG11/jvm/jvm/bin"
+
+      TARGET_ENVIRONMENT: ${{ inputs.targetEnvironment }}
+      ISPACKAGES_LIST: ${{ inputs.packageName }}
+      TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias }}
+
+      MAIN_BUILDNUMBER: ${{ inputs.buildNumber }}
+
+      HAS_ADAPTERPKG: ${{ inputs.hasAdapterPackage }}
+      ADAPTER_CONFIGPKG: ${{ inputs.adapterConfigPackage }}
+
+      REPO_BRANCH_NAME: ${{ inputs.RepoBranchName }}
+
+      EXECUTE_WMTEST: ${{ inputs.executeWmTestSuite }}
+
+      CHECKOUT_DIR: "C:/SoftwareAG/tools/Checkout"
+
+
+    steps:
+
+      # ==========================================================
+      # 1. Git Checkout
+      # ==========================================================
+
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      # ==========================================================
+      # 2. Set Environment Variables
+      # ==========================================================
+
+      - name: Set Environment Variables
+        shell: cmd
+        run: |
+
+          echo Environment Variables set.
+          echo.
+          echo Target Environment  : %TARGET_ENVIRONMENT%
+          echo IS Packages         : %ISPACKAGES_LIST%
+          echo IS Group Alias      : %TARGET_ISGROUP_ALIAS%
+          echo Checkout Directory  : %CHECKOUT_DIR%
+          echo Has Adapter Package : %HAS_ADAPTERPKG%
+          echo Adapter Config      : %ADAPTER_CONFIGPKG%
+          echo Execute WM Test     : %EXECUTE_WMTEST%
+          echo Build Number        : %MAIN_BUILDNUMBER%
+          echo Repository Branch   : %REPO_BRANCH_NAME%
+          echo.
+          echo JAVA_HOME           : %JAVA_HOME%
+          echo SAG_BUILD_HOME      : %SAG_BUILD_HOME%
+          echo CICD_HOME           : %CICD_HOME%
+
+
+      # ==========================================================
+      # 3. Verify Java / Ant / Git
+      # ==========================================================
+
+      - name: Verify Build Environment
+        shell: cmd
+        run: |
+
+          echo ===== Java =====
+          "%JAVA_HOME%\bin\java.exe" -version
+
+          echo.
+          echo ===== Git =====
+          git --version
+
+          echo.
+          echo ===== Ant =====
+          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" -version
+
+          echo.
+          echo ===== Checkout =====
+          dir C:\test
+
+
+      # ==========================================================
+      # 4. Build
+      # ==========================================================
+
+      - name: Build
+        shell: cmd
+        run: |
+
+          echo ==========================================
+          echo Build Step
+          echo ==========================================
+
+          echo "%SAG_BUILD_HOME%\common\lib\ant\bin\ant" ^
+            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
+            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
+            -DtargetEnv="%TARGET_ENVIRONMENT%" ^
+            -DSAGHome="%SAG_BUILD_HOME%" ^
+            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
+            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
+            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+            build
+
+          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant" ^
+            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
+            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
+            -DtargetEnv="%TARGET_ENVIRONMENT%" ^
+            -DSAGHome="%SAG_BUILD_HOME%" ^
+            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
+            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
+            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+            build
+
+
+      # ==========================================================
+      # 5. Create Deployment Project
+      # ==========================================================
+
+      - name: Create Deployment Project
+        shell: cmd
+        run: |
+
+          echo ==========================================
+          echo Deployment Project Creation
+          echo ==========================================
+
+          echo Deployment Project creation step
+
+
+      # ==========================================================
+      # 6. Variable Substitution
+      # ==========================================================
+
+      - name: Variable Substitution
+        shell: cmd
+        run: |
+
+          echo ==========================================
+          echo Variable Substitution
+          echo ==========================================
+
+          echo Variable Substitution step
+
+
+      # ==========================================================
+      # 7. Deploy
+      # ==========================================================
+
+      - name: Deploy
+        shell: cmd
+        run: |
+
+          echo ==========================================
+          echo Deployment
+          echo ==========================================
+
+          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" ^
+            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
+            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
+            -DSAGHome="%SAG_BUILD_HOME%" ^
+            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
+            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
+            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+            deploy
+
+
+      # ==========================================================
+      # 8. Deploy Adapter Configuration
+      # ==========================================================
+
+      - name: Deploy Adapter Configuration
+        if: ${{ inputs.hasAdapterPackage == true }}
+        shell: powershell
+        run: |
+
+          Write-Host "=========================================="
+          Write-Host "Deploy Adapter Configuration"
+          Write-Host "=========================================="
+
+          Write-Host "Target IS Group : $env:TARGET_ISGROUP_ALIAS"
+          Write-Host "Config Package  : $env:ADAPTER_CONFIGPKG"
+          Write-Host "Branch          : $env:REPO_BRANCH_NAME"
+
+          # Add the adapter deployment command here.
+          #
+          # This replaces the Jenkins downstream job:
+          #
+          # sagdevops-cicd-manage-configs/adapters/
+          # sagdevops-cicd-checkout-adaptersconfig
+
+          Write-Host "Adapter deployment step"
+
+
+      # ==========================================================
+      # 9. Optional WM Test Suite
+      # ==========================================================
+
+      - name: Execute WM Test Suite
+        if: ${{ inputs.executeWmTestSuite == true }}
+        shell: cmd
+        run: |
+
+          echo ==========================================
+          echo WebMethods Test Suite
+          echo ==========================================
+
+          echo Execute WM Test Suite
