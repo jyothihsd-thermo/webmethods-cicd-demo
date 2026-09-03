@@ -12,7 +12,7 @@ on:
         description: "WebMethods Package Name"
         required: true
         type: string
-        default: "cicdDemo"
+        default: "ThermoDemo1"
       targetISGroupAlias:
         description: "Target IS Group Alias"
         required: true
@@ -55,7 +55,7 @@ jobs:
 
     env:
       # GitHub / Jenkins parameters
-      PACKAGE_NAME: ${{ inputs.packageName || 'cicdDemo' }}
+      PACKAGE_NAME: ${{ inputs.packageName || 'ThermoDemo1' }}
       TARGET_ENVIRONMENT: ${{ inputs.targetEnvironment || 'DEV' }}
       TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias || 'default' }}
       MAIN_BUILDNUMBER: ${{ inputs.buildNumber || github.run_number }}
