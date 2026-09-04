@@ -935,3 +935,4 @@ jobs:
           Write-Host "[$env:TARGET_ISGROUP_ALIAS]"
 
           exit 0
+
