@@ -120,16 +120,12 @@ jobs:
       # WEBMETHODS INSTALLATION
       # ==========================================================
 
-      CICD_HOME: "C:/devops/sagdevops-cicd"
 
-      SAG_BUILD_HOME: "C:/SoftwareAG11_ABE"
-
-      SAG_HOME: "C:/SoftwareAG11_ABE"
-
-      ANT_HOME: "C:/SoftwareAG11_ABE/common/lib/ant"
-
-      JAVA_HOME: "C:/SoftwareAG11/jvm/jvm/bin"
-
+  CICD_HOME: C:/devops/sagdevops-cicd
+  SAG_BUILD_HOME: C:/SoftwareAG11_ABE
+  SAG_HOME: C:/SoftwareAG11_ABE
+  ANT_HOME: C:/SoftwareAG11_ABE/common/lib/ant
+  JAVA_HOME: C:/SoftwareAG11/jvm/jvm/bin
 
       # ==========================================================
       # CHECKOUT DIRECTORIES
