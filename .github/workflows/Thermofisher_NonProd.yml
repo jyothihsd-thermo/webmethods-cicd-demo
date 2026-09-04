@@ -16,7 +16,7 @@ on:
       # DEPLOYMENT SCOPE
       #
       # ALL       = Build all IS packages
-      # SELECTIVE = Build only selected IS packages
+      # SELECTIVE = Build selected IS packages
       # ==========================================================
       deploymentScope:
         description: "Deployment Scope"
@@ -30,10 +30,10 @@ on:
       # ==========================================================
       # PACKAGE NAME
       #
-      # SELECTIVE example:
+      # SELECTIVE:
       # cicdDemo
       #
-      # Multiple packages:
+      # Multiple:
       # cicdDemo,ThermoDemo1
       # ==========================================================
       packageName:
@@ -41,6 +41,19 @@ on:
         required: false
         type: string
         default: ""
+
+      # ==========================================================
+      # PROJECT NAME
+      #
+      # This is required by buildInitProject.xml.
+      #
+      # Example:
+      # cicdwebm_105
+      # ==========================================================
+      projectName:
+        description: "CI/CD Project Name"
+        required: true
+        type: string
 
       # ==========================================================
       # TARGET IS GROUP
@@ -137,6 +150,8 @@ jobs:
 
       ISPACKAGES_LIST: ${{ inputs.packageName }}
 
+      PROJECT_NAME: ${{ inputs.projectName }}
+
       TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias }}
 
       MAIN_BUILDNUMBER: ${{ inputs.buildNumber }}
@@ -168,15 +183,7 @@ jobs:
 
 
       # ==========================================================
-      # 2. COPY GITHUB WORKSPACE TO WEBMETHODS CHECKOUT DIRECTORY
-      #
-      # GitHub workspace:
-      #
-      # C:\SoftwareAG\actions-runner\_work\...
-      #
-      # becomes:
-      #
-      # C:\SoftwareAG\tools\Checkout
+      # 2. PREPARE WEBMETHODS CHECKOUT DIRECTORY
       # ==========================================================
 
       - name: Prepare WebMethods Checkout Directory
@@ -201,7 +208,7 @@ jobs:
 
 
           # ======================================================
-          # CREATE / CLEAN CHECKOUT DIRECTORY
+          # CLEAN / CREATE CHECKOUT DIRECTORY
           # ======================================================
 
           if (Test-Path $env:CHECKOUT_DIR) {
@@ -229,7 +236,7 @@ jobs:
 
 
           # ======================================================
-          # ROBOCOPY
+          # COPY GITHUB WORKSPACE
           # ======================================================
 
           Write-Host ""
@@ -251,10 +258,10 @@ jobs:
 
 
           # ======================================================
-          # ROBOCOPY
+          # ROBOCOPY:
           #
-          # 0-7 = successful / acceptable
-          # 8+  = failure
+          # 0-7 = SUCCESS / ACCEPTABLE
+          # 8+  = FAILURE
           # ======================================================
 
           if ($robocopyExitCode -ge 8) {
@@ -271,7 +278,7 @@ jobs:
 
 
           # ======================================================
-          # VERIFY CHECKOUT
+          # DISPLAY CHECKOUT
           # ======================================================
 
           Write-Host ""
@@ -284,9 +291,7 @@ jobs:
 
           # ======================================================
           # IMPORTANT:
-          #
-          # Robocopy exit code 1 means files were copied.
-          # Explicitly return 0 to GitHub Actions.
+          # Robocopy code 1 is successful.
           # ======================================================
 
           exit 0
@@ -313,6 +318,8 @@ jobs:
           Write-Host "DEPLOYMENT_SCOPE : $env:DEPLOYMENT_SCOPE"
 
           Write-Host "ISPACKAGES_LIST : $env:ISPACKAGES_LIST"
+
+          Write-Host "PROJECT_NAME : $env:PROJECT_NAME"
 
           Write-Host "TARGET_ISGROUP_ALIAS : $env:TARGET_ISGROUP_ALIAS"
 
@@ -385,7 +392,6 @@ jobs:
 
           Write-Host ""
           Write-Host "Checking required directories"
-          Write-Host "-----------------------------"
 
 
           $requiredPaths = @(
@@ -432,19 +438,6 @@ jobs:
 
       # ==========================================================
       # 5. PREPARE BUILD SOURCE
-      #
-      # ALL:
-      #
-      # C:\SoftwareAG\tools\Checkout\is\packages
-      #
-      #
-      # SELECTIVE:
-      #
-      # C:\SoftwareAG\tools\CheckoutSelective
-      #
-      # +-- cicdDemo
-      # +-- ThermoDemo1
-      #
       # ==========================================================
 
       - name: Prepare Build Source
@@ -457,10 +450,6 @@ jobs:
           Write-Host "Preparing Build Source"
           Write-Host "=========================================="
 
-
-          # ======================================================
-          # DEFINE SOURCE DIRECTORIES
-          # ======================================================
 
           $sourcePackages = Join-Path `
             $env:CHECKOUT_DIR `
@@ -479,7 +468,7 @@ jobs:
 
 
           # ======================================================
-          # ALL PACKAGE DEPLOYMENT
+          # ALL
           # ======================================================
 
           if ($env:DEPLOYMENT_SCOPE -eq "ALL") {
@@ -509,7 +498,7 @@ jobs:
 
 
           # ======================================================
-          # SELECTIVE PACKAGE DEPLOYMENT
+          # SELECTIVE
           # ======================================================
 
           elseif ($env:DEPLOYMENT_SCOPE -eq "SELECTIVE") {
@@ -521,7 +510,7 @@ jobs:
 
 
               # ==================================================
-              # VALIDATE PACKAGE LIST
+              # PACKAGE LIST VALIDATION
               # ==================================================
 
               if ([string]::IsNullOrWhiteSpace($env:ISPACKAGES_LIST)) {
@@ -587,7 +576,7 @@ jobs:
 
 
               # ==================================================
-              # PROCESS EACH PACKAGE
+              # COPY EACH PACKAGE
               # ==================================================
 
               foreach ($package in $packages) {
@@ -601,7 +590,7 @@ jobs:
 
 
                   # =================================================
-                  # VALIDATE PACKAGE NAME
+                  # PACKAGE NAME VALIDATION
                   # =================================================
 
                   if (
@@ -639,7 +628,7 @@ jobs:
 
 
                   # =================================================
-                  # VERIFY SOURCE
+                  # VERIFY PACKAGE
                   # =================================================
 
                   if (-not (Test-Path $sourcePackage)) {
@@ -690,13 +679,14 @@ jobs:
 
 
                   Write-Host ""
+
                   Write-Host `
                     "Package [$package] copied successfully."
               }
 
 
               # ==================================================
-              # SELECTIVE DIRECTORY BECOMES BUILD SOURCE
+              # SELECTIVE SOURCE
               # ==================================================
 
               $buildSourceDir = $selectiveDir
@@ -739,7 +729,7 @@ jobs:
 
 
           # ======================================================
-          # PERSIST BUILD_SOURCE_DIR
+          # SAVE BUILD_SOURCE_DIR
           # ======================================================
 
           "BUILD_SOURCE_DIR=$buildSourceDir" `
@@ -785,7 +775,7 @@ jobs:
 
 
           # ======================================================
-          # VALIDATE ENVIRONMENT VARIABLE
+          # VALIDATE BUILD SOURCE
           # ======================================================
 
           if ([string]::IsNullOrWhiteSpace($env:BUILD_SOURCE_DIR)) {
@@ -795,10 +785,6 @@ jobs:
               exit 1
           }
 
-
-          # ======================================================
-          # VALIDATE DIRECTORY
-          # ======================================================
 
           if (-not (Test-Path $env:BUILD_SOURCE_DIR)) {
 
@@ -850,16 +836,9 @@ jobs:
       # ==========================================================
       # 7. BUILD
       #
-      # IMPORTANT:
+      # projectName is mandatory according to buildInitProject.xml.
       #
-      # The wrapper build.xml is explicitly resolved and checked.
-      #
-      # SOURCE_DIR is passed to the Ant wrapper.
-      #
-      # abe-project.properties must contain:
-      #
-      # isPackages=${SOURCE_DIR}
-      #
+      # SOURCE_DIR controls the package scope.
       # ==========================================================
 
       - name: Build
@@ -884,6 +863,11 @@ jobs:
 
 
           Write-Host ""
+          Write-Host "Project Name:"
+          Write-Host $env:PROJECT_NAME
+
+
+          Write-Host ""
           Write-Host "Build Number:"
           Write-Host $env:MAIN_BUILDNUMBER
 
@@ -891,6 +875,18 @@ jobs:
           Write-Host ""
           Write-Host "Target Environment:"
           Write-Host $env:TARGET_ENVIRONMENT
+
+
+          # ======================================================
+          # VALIDATE PROJECT NAME
+          # ======================================================
+
+          if ([string]::IsNullOrWhiteSpace($env:PROJECT_NAME)) {
+
+              Write-Error "PROJECT_NAME is empty."
+
+              exit 1
+          }
 
 
           # ======================================================
@@ -958,30 +954,6 @@ jobs:
               Write-Error `
                 "Ant build file does not exist: $antBuildFile"
 
-
-              Write-Host ""
-              Write-Host "CICD_HOME contents:"
-
-              Get-ChildItem `
-                -Path $env:CICD_HOME `
-                -Force
-
-
-              Write-Host ""
-              Write-Host "Searching for build.xml under CICD_HOME..."
-
-
-              Get-ChildItem `
-                -Path $env:CICD_HOME `
-                -Filter "build.xml" `
-                -Recurse `
-                -ErrorAction SilentlyContinue `
-                | ForEach-Object {
-
-                    Write-Host $_.FullName
-                }
-
-
               exit 1
           }
 
@@ -1018,7 +990,7 @@ jobs:
 
 
           # ======================================================
-          # DISPLAY FINAL BUILD PARAMETERS
+          # FINAL BUILD PARAMETERS
           # ======================================================
 
           Write-Host ""
@@ -1035,6 +1007,11 @@ jobs:
           Write-Host ""
           Write-Host "SOURCE_DIR:"
           Write-Host $env:BUILD_SOURCE_DIR
+
+
+          Write-Host ""
+          Write-Host "projectName:"
+          Write-Host $env:PROJECT_NAME
 
 
           Write-Host ""
@@ -1062,6 +1039,7 @@ jobs:
             "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
             "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
             "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
+            "-DprojectName=$env:PROJECT_NAME" `
             -f "$antBuildFile" `
             build
 
@@ -1108,6 +1086,11 @@ jobs:
 
 
           Write-Host ""
+          Write-Host "Project Name:"
+          Write-Host $env:PROJECT_NAME
+
+
+          Write-Host ""
           Write-Host "Target Environment:"
           Write-Host $env:TARGET_ENVIRONMENT
 
@@ -1139,6 +1122,11 @@ jobs:
           Write-Host "=========================================="
           Write-Host "Variable Substitution"
           Write-Host "=========================================="
+
+
+          Write-Host ""
+          Write-Host "Project Name:"
+          Write-Host $env:PROJECT_NAME
 
 
           Write-Host ""
@@ -1176,6 +1164,11 @@ jobs:
 
 
           Write-Host ""
+          Write-Host "Project Name:"
+          Write-Host $env:PROJECT_NAME
+
+
+          Write-Host ""
           Write-Host "Build Source Directory:"
           Write-Host $env:BUILD_SOURCE_DIR
 
@@ -1192,11 +1185,6 @@ jobs:
           $antBuildFile = Join-Path `
             $env:CICD_HOME `
             "cicd\scripts\build-and-deploy\run\build.xml"
-
-
-          Write-Host ""
-          Write-Host "Ant Build File:"
-          Write-Host $antBuildFile
 
 
           # ======================================================
@@ -1228,6 +1216,7 @@ jobs:
             "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
             "-DisGroupAlias=$env:TARGET_ISGROUP_ALIAS" `
             "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
+            "-DprojectName=$env:PROJECT_NAME" `
             -f "$antBuildFile" `
             deploy
 
