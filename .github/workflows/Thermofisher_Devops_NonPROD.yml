@@ -1,4 +1,4 @@
-name: Thermofisher_Devops
+name: Thermofisher_Devops_NonPROD
 
 on:
   workflow_dispatch:
@@ -64,7 +64,7 @@ on:
 
 jobs:
 
-  webmethods-cicd:
+  Thermofisher_Devops_NonPROD:
 
     runs-on:
       - self-hosted
