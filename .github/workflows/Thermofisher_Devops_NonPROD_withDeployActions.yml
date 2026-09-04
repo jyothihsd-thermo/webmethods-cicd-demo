@@ -650,7 +650,7 @@ jobs:
       # ============================================================
 
       - name: Build with ABE
-        if: ${{ inputs.action != 'Deploy' }}
+        if: ${{ inputs.action == 'Build' || inputs.action == 'Build and Deploy' }}
         shell: powershell
         run: |
 
@@ -658,13 +658,10 @@ jobs:
           Write-Host "Starting ABE build"
           Write-Host "=================================================="
 
-
-          $antExecutable = `
-              "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
+          $antExecutable = "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
 
           $antBuildFile = `
               "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
-
 
           Write-Host "SAG_HOME         = [$env:SAG_HOME]"
           Write-Host "SAG_CI_HOME      = [$env:CICD_HOME/cicd/scripts/build-and-deploy/setup]"
@@ -674,6 +671,7 @@ jobs:
           Write-Host "projectName      = [$env:PROJECT_NAME]"
           Write-Host ""
 
+          # Pass each -D option as an individual PowerShell argument.
 
           & $antExecutable `
               ("-DSAGHome={0}" -f $env:SAG_HOME) `
@@ -685,23 +683,21 @@ jobs:
               -f "$antBuildFile" `
               build
 
+          $antExitCode = $LASTEXITCODE
 
-          if ($LASTEXITCODE -ne 0) {
+          Write-Host ""
+          Write-Host "Ant exit code: [$antExitCode]"
 
+          if ($antExitCode -ne 0) {
               Write-Error "webMethods ABE build failed."
               exit 1
           }
-
 
           Write-Host ""
           Write-Host "ABE build completed successfully."
 
           exit 0
 
-
-      # ============================================================
-      # 8. Prepare Deployment Configuration
-      # ============================================================
 
       - name: Prepare Deployment Configuration
         if: ${{ inputs.action != 'Build' }}
@@ -776,7 +772,7 @@ jobs:
       # ============================================================
 
       - name: Deploy with Project Automator and Deployer
-        if: ${{ inputs.action != 'Build' }}
+        if: ${{ inputs.action == 'Build and Deploy' || inputs.action == 'Deploy' }}
         shell: powershell
         run: |
 
@@ -784,96 +780,107 @@ jobs:
           Write-Host "Starting webMethods deployment"
           Write-Host "=================================================="
 
-
-          $antExecutable = `
-              "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
+          $antExecutable = "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
 
           $antBuildFile = `
               "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
 
-
           Write-Host ""
           Write-Host "Deployment parameters:"
-          Write-Host "action               = [$env:ACTION]"
-          Write-Host "buildToDeploy        = [$env:BUILD_TO_DEPLOY]"
+          Write-Host "Action               = [$env:ACTION]"
+          Write-Host "Build To Deploy      = [$env:BUILD_TO_DEPLOY]"
           Write-Host "SAG_HOME             = [$env:SAG_HOME]"
           Write-Host "SAG_CI_HOME          = [$env:CICD_HOME/cicd/scripts/build-and-deploy/setup]"
-          Write-Host "SOURCE_DIR           = [$env:BUILD_SOURCE_DIR]"
-          Write-Host "targetEnv            = [$env:TARGET_ENVIRONMENT]"
-          Write-Host "targetISGroupAlias   = [$env:TARGET_ISGROUP_ALIAS]"
-          Write-Host "buildNumber          = [$env:MAIN_BUILDNUMBER]"
-          Write-Host "projectName          = [$env:PROJECT_NAME]"
-          Write-Host ""
+          Write-Host "Target Environment   = [$env:TARGET_ENVIRONMENT]"
+          Write-Host "Target IS Group Alias= [$env:TARGET_ISGROUP_ALIAS]"
+          Write-Host "Build Number         = [$env:MAIN_BUILDNUMBER]"
+          Write-Host "Project Name         = [$env:PROJECT_NAME]"
+          Write-Host "Build Backup Dir     = [C:/buildsBackup]"
 
+          if (-not (Test-Path $antExecutable)) {
+              Write-Error "Ant executable does not exist: $antExecutable"
+              exit 1
+          }
 
-          # IMPORTANT:
-          #
-          # buildDeployer.xml expects:
-          #
-          #     targetISGroupAlias
-          #
-          # Therefore the command line MUST use:
-          #
-          #     -DtargetISGroupAlias
-          #
-          # Do NOT use:
-          #
-          #     -DisGroupAlias
-          #
+          if (-not (Test-Path $antBuildFile)) {
+              Write-Error "CI/CD Ant build file does not exist: $antBuildFile"
+              exit 1
+          }
 
-          Write-Host "Ant target alias argument:"
-          Write-Host "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS"
-          Write-Host ""
+          if ($env:ACTION -eq "Deploy") {
 
+              if ([string]::IsNullOrWhiteSpace($env:BUILD_TO_DEPLOY)) {
+                  Write-Error "BUILD_TO_DEPLOY is required for Deploy."
+                  exit 1
+              }
+
+              $buildPath = Join-Path "C:\buildsBackup" $env:BUILD_TO_DEPLOY
+
+              Write-Host ""
+              Write-Host "Existing build path:"
+              Write-Host "[$buildPath]"
+
+              if (-not (Test-Path $buildPath -PathType Container)) {
+                  Write-Error "Requested build does not exist: $buildPath"
+                  exit 1
+              }
+          }
 
           Write-Host ""
           Write-Host "=================================================="
           Write-Host "Executing Ant"
           Write-Host "=================================================="
 
-          # IMPORTANT:
-          # Pass every -D option as a separate PowerShell argument.
-          # This matches the manually successful command:
-          #
-          # .\ant.bat '-DSAGHome=...' '-DSAG_CI_HOME=...' ...
-          #
-          # Do NOT build an argument array and splat it into ant.bat.
+          # Pass each -D option as an individual PowerShell argument.
+          # This matches the manually successful ant.bat invocation.
 
-          & $antExecutable `
-              ("-DSAGHome={0}" -f $env:SAG_HOME) `
-              ("-DSAG_CI_HOME={0}/cicd/scripts/build-and-deploy/setup" -f $env:CICD_HOME) `
-              ("-Daction={0}" -f $env:ACTION) `
-              ("-DbuildToDeploy={0}" -f $env:BUILD_TO_DEPLOY) `
-              "-DbuildBackupDir=C:/buildsBackup" `
-              ("-DtargetISGroupAlias={0}" -f $env:TARGET_ISGROUP_ALIAS) `
-              ("-DbuildNumber={0}" -f $env:MAIN_BUILDNUMBER) `
-              ("-DprojectName={0}" -f $env:PROJECT_NAME) `
-              -f "$antBuildFile" `
-              deploy
+          if ($env:ACTION -eq "Deploy") {
 
+              & $antExecutable `
+                  ("-DSAGHome={0}" -f $env:SAG_HOME) `
+                  ("-DSAG_CI_HOME={0}/cicd/scripts/build-and-deploy/setup" -f $env:CICD_HOME) `
+                  ("-Daction={0}" -f $env:ACTION) `
+                  ("-DbuildToDeploy={0}" -f $env:BUILD_TO_DEPLOY) `
+                  "-DbuildBackupDir=C:/buildsBackup" `
+                  ("-DtargetISGroupAlias={0}" -f $env:TARGET_ISGROUP_ALIAS) `
+                  ("-DbuildNumber={0}" -f $env:MAIN_BUILDNUMBER) `
+                  ("-DprojectName={0}" -f $env:PROJECT_NAME) `
+                  -f "$antBuildFile" `
+                  deploy
 
-          if ($LASTEXITCODE -ne 0) {
+          }
+          else {
 
-              Write-Error `
-                  "WebMethods Deployer execution failed."
-
-              exit 1
+              & $antExecutable `
+                  ("-DSAGHome={0}" -f $env:SAG_HOME) `
+                  ("-DSAG_CI_HOME={0}/cicd/scripts/build-and-deploy/setup" -f $env:CICD_HOME) `
+                  ("-Daction={0}" -f $env:ACTION) `
+                  ("-DSOURCE_DIR={0}" -f $env:BUILD_SOURCE_DIR) `
+                  ("-DtargetEnv={0}" -f $env:TARGET_ENVIRONMENT) `
+                  ("-DtargetISGroupAlias={0}" -f $env:TARGET_ISGROUP_ALIAS) `
+                  ("-DbuildNumber={0}" -f $env:MAIN_BUILDNUMBER) `
+                  ("-DprojectName={0}" -f $env:PROJECT_NAME) `
+                  -f "$antBuildFile" `
+                  deploy
           }
 
+          $antExitCode = $LASTEXITCODE
+
+          Write-Host ""
+          Write-Host "Ant exit code: [$antExitCode]"
+
+          if ($antExitCode -ne 0) {
+              Write-Error "WebMethods Deployer execution failed."
+              exit 1
+          }
 
           Write-Host ""
           Write-Host "=================================================="
           Write-Host "Deployment completed successfully."
           Write-Host "=================================================="
 
-
           exit 0
 
-
-      # ============================================================
-
-# 11. Verify Generated Deployer Specification
-      # ============================================================
 
       - name: Verify Generated Deployer Specification
         if: ${{ inputs.action != 'Build' }}
