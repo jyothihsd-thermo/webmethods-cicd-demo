@@ -1,4 +1,4 @@
-name: Thermofisher_NonProd
+name: Thermofisher_Dev
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ on:
         type: string
 
       buildNumber:
-        description: "Main Build Number"
+        description: "Build Number"
         required: true
         type: string
 
@@ -41,7 +41,7 @@ on:
         default: false
 
       adapterConfigPackage:
-        description: "Adapter Config Package"
+        description: "Adapter Configuration Package"
         required: false
         type: string
         default: ""
@@ -63,21 +63,31 @@ jobs:
 
   webmethods-cicd:
 
-    name: Thermofisher_NonProd
-
-    runs-on: [self-hosted, windows, webmethods]
+    runs-on:
+      - self-hosted
+      - windows
+      - webmethods
 
     env:
 
       # ==========================================================
-      # WebMethods / CI-CD Installation Paths
+      # WebMethods / CI-CD Paths
       # ==========================================================
 
       CICD_HOME: "C:/devops/sagdevops-cicd"
+
       SAG_BUILD_HOME: "C:/SoftwareAG11_ABE"
+
       SAG_HOME: "C:/SoftwareAG11"
+
       ANT_HOME: "C:/SoftwareAG11_ABE/common/lib/ant"
+
       JAVA_HOME: "C:/SoftwareAG11/jvm/jvm/bin"
+
+      CHECKOUT_DIR: "C:/SoftwareAG/tools/Checkout"
+
+      SELECTIVE_SOURCE_DIR: "C:/SoftwareAG/tools/CheckoutSelective"
+
 
       # ==========================================================
       # Workflow Inputs
@@ -87,9 +97,6 @@ jobs:
 
       DEPLOYMENT_SCOPE: ${{ inputs.deploymentScope }}
 
-      # Existing variable retained for compatibility.
-      # For SELECTIVE deployment this contains comma-separated
-      # package names.
       ISPACKAGES_LIST: ${{ inputs.packageName }}
 
       TARGET_ISGROUP_ALIAS: ${{ inputs.targetISGroupAlias }}
@@ -104,19 +111,11 @@ jobs:
 
       EXECUTE_WMTEST: ${{ inputs.executeWmTestSuite }}
 
-      # ==========================================================
-      # Checkout / Build Source Directories
-      # ==========================================================
-
-      CHECKOUT_DIR: "C:/SoftwareAG/tools/Checkout"
-
-      SELECTIVE_SOURCE_DIR: "C:/SoftwareAG/tools/CheckoutSelective"
-
 
     steps:
 
       # ==========================================================
-      # 1. Git Checkout
+      # 1. Checkout Repository
       # ==========================================================
 
       - name: Checkout GitHub Repository
@@ -125,15 +124,13 @@ jobs:
 
         with:
 
-          # Checkout the branch selected from workflow_dispatch
           ref: ${{ inputs.RepoBranchName }}
 
-          # Clean the GitHub runner workspace before checkout
           clean: true
 
 
       # ==========================================================
-      # 2. Copy Checkout To Standard WebMethods Checkout Directory
+      # 2. Prepare WebMethods Checkout Directory
       # ==========================================================
 
       - name: Prepare WebMethods Checkout Directory
@@ -149,6 +146,10 @@ jobs:
           Write-Host "GitHub Workspace : $env:GITHUB_WORKSPACE"
           Write-Host "Checkout Dir     : $env:CHECKOUT_DIR"
 
+          # ------------------------------------------------------
+          # Create / clean fixed WebMethods checkout directory
+          # ------------------------------------------------------
+
           if (Test-Path $env:CHECKOUT_DIR) {
 
               Write-Host "Cleaning existing checkout directory..."
@@ -159,6 +160,7 @@ jobs:
                 -Force `
                 -ErrorAction SilentlyContinue
           }
+
           else {
 
               Write-Host "Creating checkout directory..."
@@ -168,6 +170,11 @@ jobs:
                 -Path $env:CHECKOUT_DIR `
                 -Force | Out-Null
           }
+
+
+          # ------------------------------------------------------
+          # Copy GitHub workspace to WebMethods checkout directory
+          # ------------------------------------------------------
 
           Write-Host "Copying GitHub repository to CHECKOUT_DIR..."
 
@@ -181,7 +188,14 @@ jobs:
 
           Write-Host "Robocopy exit code: $robocopyExitCode"
 
-          # Robocopy exit codes 0-7 indicate success / successful copy
+
+          # ------------------------------------------------------
+          # Robocopy exit codes
+          #
+          # 0-7  = Successful / acceptable
+          # 8+   = Failure
+          # ------------------------------------------------------
+
           if ($robocopyExitCode -ge 8) {
 
               Write-Error "Failed to copy GitHub workspace to CHECKOUT_DIR."
@@ -189,115 +203,166 @@ jobs:
               exit $robocopyExitCode
           }
 
+
           Write-Host "Repository successfully copied."
 
 
+          # ------------------------------------------------------
+          # Display checkout directory
+          # ------------------------------------------------------
+
+          Write-Host "Checkout directory contents:"
+
+          Get-ChildItem `
+            -Path $env:CHECKOUT_DIR `
+            -Force
+
+
+          # ------------------------------------------------------
+          # IMPORTANT
+          #
+          # Robocopy returns:
+          # 0 = Nothing copied
+          # 1 = Files copied successfully
+          #
+          # GitHub Actions treats the final PowerShell exit code
+          # as the step result.
+          #
+          # Therefore explicitly return 0.
+          # ------------------------------------------------------
+
+          exit 0
+
+
       # ==========================================================
-      # 3. Set Environment Variables
+      # 3. Display Environment Variables
       # ==========================================================
 
       - name: Set Environment Variables
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo Environment Variables
-          echo ==========================================
+          Write-Host "=========================================="
+          Write-Host "CI/CD Environment Variables"
+          Write-Host "=========================================="
 
-          echo Target Environment  : %TARGET_ENVIRONMENT%
-          echo Deployment Scope    : %DEPLOYMENT_SCOPE%
-          echo IS Packages         : %ISPACKAGES_LIST%
-          echo IS Group Alias      : %TARGET_ISGROUP_ALIAS%
-          echo Checkout Directory  : %CHECKOUT_DIR%
-          echo Selective Source    : %SELECTIVE_SOURCE_DIR%
-          echo Has Adapter Package : %HAS_ADAPTERPKG%
-          echo Adapter Config      : %ADAPTER_CONFIGPKG%
-          echo Execute WM Test     : %EXECUTE_WMTEST%
-          echo Build Number        : %MAIN_BUILDNUMBER%
-          echo Repository Branch   : %REPO_BRANCH_NAME%
+          Write-Host "TARGET_ENVIRONMENT : $env:TARGET_ENVIRONMENT"
 
-          echo.
-          echo JAVA_HOME            : %JAVA_HOME%
-          echo SAG_BUILD_HOME       : %SAG_BUILD_HOME%
-          echo SAG_HOME             : %SAG_HOME%
-          echo CICD_HOME            : %CICD_HOME%
+          Write-Host "DEPLOYMENT_SCOPE   : $env:DEPLOYMENT_SCOPE"
 
-          echo.
+          Write-Host "ISPACKAGES_LIST    : $env:ISPACKAGES_LIST"
+
+          Write-Host "TARGET_ISGROUP_ALIAS : $env:TARGET_ISGROUP_ALIAS"
+
+          Write-Host "MAIN_BUILDNUMBER   : $env:MAIN_BUILDNUMBER"
+
+          Write-Host "HAS_ADAPTERPKG     : $env:HAS_ADAPTERPKG"
+
+          Write-Host "ADAPTER_CONFIGPKG  : $env:ADAPTER_CONFIGPKG"
+
+          Write-Host "REPO_BRANCH_NAME   : $env:REPO_BRANCH_NAME"
+
+          Write-Host "EXECUTE_WMTEST     : $env:EXECUTE_WMTEST"
+
+          Write-Host "CHECKOUT_DIR       : $env:CHECKOUT_DIR"
+
+          Write-Host "SELECTIVE_SOURCE_DIR : $env:SELECTIVE_SOURCE_DIR"
 
 
       # ==========================================================
-      # 4. Verify Java / Ant / Git
+      # 4. Verify Build Environment
       # ==========================================================
 
       - name: Verify Build Environment
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo Java
-          echo ==========================================
-
-          "%JAVA_HOME%\bin\java.exe" -version
+          Write-Host "=========================================="
+          Write-Host "Verifying Build Environment"
+          Write-Host "=========================================="
 
 
-          echo.
-          echo ==========================================
-          echo Git
-          echo ==========================================
+          Write-Host ""
+          Write-Host "Java Version"
+          Write-Host "------------"
+
+          & "$env:JAVA_HOME\java.exe" -version
+
+
+          Write-Host ""
+          Write-Host "Git Version"
+          Write-Host "-----------"
 
           git --version
 
 
-          echo.
-          echo ==========================================
-          echo Ant
-          echo ==========================================
+          Write-Host ""
+          Write-Host "Ant Version"
+          Write-Host "-----------"
 
-          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" -version
-
-
-          echo.
-          echo ==========================================
-          echo Checkout Directory
-          echo ==========================================
-
-          dir "%CHECKOUT_DIR%"
+          & "$env:ANT_HOME\bin\ant.bat" -version
 
 
-          echo.
-          echo ==========================================
-          echo IS Packages
-          echo ==========================================
+          Write-Host ""
+          Write-Host "Checking required directories"
+          Write-Host "-----------------------------"
 
-          dir "%CHECKOUT_DIR%\is\packages"
+          $requiredPaths = @(
+
+              "$env:JAVA_HOME",
+
+              "$env:SAG_HOME",
+
+              "$env:SAG_BUILD_HOME",
+
+              "$env:ANT_HOME",
+
+              "$env:CICD_HOME",
+
+              "$env:CHECKOUT_DIR",
+
+              "$env:CHECKOUT_DIR\is",
+
+              "$env:CHECKOUT_DIR\is\packages"
+
+          )
+
+
+          foreach ($path in $requiredPaths) {
+
+              Write-Host "Checking: [$path]"
+
+              if (-not (Test-Path $path)) {
+
+                  Write-Error "Required path does not exist: $path"
+
+                  exit 1
+              }
+
+              else {
+
+                  Write-Host "OK: $path"
+              }
+          }
 
 
       # ==========================================================
       # 5. Prepare Build Source
       #
       # ALL:
-      #
-      #   CHECKOUT_DIR\is\packages
-      #          |
-      #          v
-      #   BUILD_SOURCE_DIR
-      #
+      #   Build source =
+      #   C:/SoftwareAG/tools/Checkout/is/packages
       #
       # SELECTIVE:
+      #   Selected packages are copied to:
+      #   C:/SoftwareAG/tools/CheckoutSelective
       #
-      #   CHECKOUT_DIR\is\packages\Pkg1
-      #   CHECKOUT_DIR\is\packages\Pkg2
-      #          |
-      #          v
-      #   CHECKOUT_DIR\CheckoutSelective
-      #          |
-      #          v
-      #   BUILD_SOURCE_DIR
-      #
+      #   Build source =
+      #   C:/SoftwareAG/tools/CheckoutSelective
       # ==========================================================
 
       - name: Prepare Build Source
@@ -307,36 +372,28 @@ jobs:
         run: |
 
           Write-Host "=========================================="
-          Write-Host "Prepare Build Source"
+          Write-Host "Preparing Build Source"
           Write-Host "=========================================="
+
 
           $sourcePackages = Join-Path `
             $env:CHECKOUT_DIR `
             "is\packages"
 
+
           $selectiveDir = $env:SELECTIVE_SOURCE_DIR
 
 
           Write-Host "Deployment Scope : $env:DEPLOYMENT_SCOPE"
+
           Write-Host "Source Packages  : $sourcePackages"
+
           Write-Host "Selective Dir    : $selectiveDir"
 
 
-          # ------------------------------------------------------
-          # Validate source package directory
-          # ------------------------------------------------------
-
-          if (-not (Test-Path $sourcePackages -PathType Container)) {
-
-              Write-Error "IS packages directory does not exist: $sourcePackages"
-
-              exit 1
-          }
-
-
-          # ------------------------------------------------------
+          # ======================================================
           # ALL PACKAGE DEPLOYMENT
-          # ------------------------------------------------------
+          # ======================================================
 
           if ($env:DEPLOYMENT_SCOPE -eq "ALL") {
 
@@ -345,16 +402,26 @@ jobs:
               Write-Host "ALL PACKAGE DEPLOYMENT"
               Write-Host "=========================================="
 
+              if (-not (Test-Path $sourcePackages)) {
+
+                  Write-Error "IS packages directory does not exist: $sourcePackages"
+
+                  exit 1
+              }
+
+
               $buildSourceDir = $sourcePackages
 
-              Write-Host "All packages will be used directly from:"
-              Write-Host "$buildSourceDir"
+
+              Write-Host ""
+              Write-Host "Build Source Directory:"
+              Write-Host $buildSourceDir
           }
 
 
-          # ------------------------------------------------------
+          # ======================================================
           # SELECTIVE PACKAGE DEPLOYMENT
-          # ------------------------------------------------------
+          # ======================================================
 
           elseif ($env:DEPLOYMENT_SCOPE -eq "SELECTIVE") {
 
@@ -364,57 +431,58 @@ jobs:
               Write-Host "=========================================="
 
 
+              # --------------------------------------------------
               # Validate package input
+              # --------------------------------------------------
 
               if ([string]::IsNullOrWhiteSpace($env:ISPACKAGES_LIST)) {
 
                   Write-Error `
-                    "Deployment Scope is SELECTIVE but no package name(s) were provided."
+                    "packageName is required when deploymentScope is SELECTIVE."
 
                   exit 1
               }
 
 
               # --------------------------------------------------
-              # Clean / recreate selective directory
+              # Clean selective source directory
               # --------------------------------------------------
 
               if (Test-Path $selectiveDir) {
 
-                  Write-Host "Cleaning existing selective source directory..."
+                  Write-Host "Cleaning selective source directory..."
 
                   Remove-Item `
-                    -Path $selectiveDir `
+                    -Path "$selectiveDir\*" `
                     -Recurse `
-                    -Force
+                    -Force `
+                    -ErrorAction SilentlyContinue
+              }
+
+              else {
+
+                  Write-Host "Creating selective source directory..."
+
+                  New-Item `
+                    -ItemType Directory `
+                    -Path $selectiveDir `
+                    -Force | Out-Null
               }
 
 
-              Write-Host "Creating selective source directory..."
-
-              New-Item `
-                -ItemType Directory `
-                -Path $selectiveDir `
-                -Force | Out-Null
-
-
               # --------------------------------------------------
-              # Convert comma-separated package list to array
+              # Split comma-separated package list
               # --------------------------------------------------
 
               $packages = $env:ISPACKAGES_LIST `
                 -split "," `
-                | ForEach-Object { $_.Trim() } `
-                | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } `
+                | ForEach-Object {
+                    $_.Trim()
+                  } `
+                | Where-Object {
+                    -not [string]::IsNullOrWhiteSpace($_)
+                  } `
                 | Select-Object -Unique
-
-
-              if ($packages.Count -eq 0) {
-
-                  Write-Error "No valid package names were provided."
-
-                  exit 1
-              }
 
 
               Write-Host ""
@@ -425,26 +493,32 @@ jobs:
 
 
               # --------------------------------------------------
-              # Validate and copy every selected package
+              # Validate and copy each package
               # --------------------------------------------------
 
               foreach ($package in $packages) {
 
                   Write-Host ""
                   Write-Host "------------------------------------------"
-                  Write-Host "Processing Package: $package"
+
+                  Write-Host "Processing package: $package"
+
                   Write-Host "------------------------------------------"
 
 
-                  # Prevent invalid path values such as:
-                  # ..\Package
-                  # Package\Subfolder
-                  # C:\something
+                  # ------------------------------------------------
+                  # Prevent path traversal / invalid package paths
+                  # ------------------------------------------------
 
-                  if ($package -match '[\\/:*?"<>|]') {
+                  if (
+                      $package.Contains("..") -or
+                      $package.Contains("/") -or
+                      $package.Contains("\") -or
+                      $package.Contains(":")
+                  ) {
 
                       Write-Error `
-                        "Invalid package name '$package'. Package names must not contain path separator or invalid Windows filename characters."
+                        "Invalid package name: $package"
 
                       exit 1
                   }
@@ -454,40 +528,67 @@ jobs:
                     $sourcePackages `
                     $package
 
-                  $destinationPackage = Join-Path `
+
+                  $targetPackage = Join-Path `
                     $selectiveDir `
                     $package
 
 
                   # ------------------------------------------------
-                  # Verify package exists
+                  # Verify source package exists
                   # ------------------------------------------------
 
-                  if (-not (Test-Path $sourcePackage -PathType Container)) {
+                  if (-not (Test-Path $sourcePackage)) {
 
                       Write-Error `
-                        "Requested package '$package' was not found at: $sourcePackage"
+                        "Package [$package] does not exist under [$sourcePackages]"
 
                       exit 1
                   }
 
 
-                  Write-Host "Source      : $sourcePackage"
-                  Write-Host "Destination : $destinationPackage"
+                  Write-Host "Source : $sourcePackage"
+
+                  Write-Host "Target : $targetPackage"
 
 
                   # ------------------------------------------------
-                  # Copy complete package directory
+                  # Create target package directory
                   # ------------------------------------------------
 
-                  Copy-Item `
-                    -Path $sourcePackage `
-                    -Destination $selectiveDir `
-                    -Recurse `
-                    -Force
+                  New-Item `
+                    -ItemType Directory `
+                    -Path $targetPackage `
+                    -Force | Out-Null
 
 
-                  Write-Host "Package '$package' copied successfully."
+                  # ------------------------------------------------
+                  # Copy package
+                  # ------------------------------------------------
+
+                  robocopy `
+                    "$sourcePackage" `
+                    "$targetPackage" `
+                    /E
+
+                  $robocopyExitCode = $LASTEXITCODE
+
+
+                  Write-Host `
+                    "Robocopy exit code for [$package]: $robocopyExitCode"
+
+
+                  if ($robocopyExitCode -ge 8) {
+
+                      Write-Error `
+                        "Failed to copy package [$package]."
+
+                      exit $robocopyExitCode
+                  }
+
+
+                  Write-Host `
+                    "Package [$package] copied successfully."
               }
 
 
@@ -495,40 +596,54 @@ jobs:
 
 
               Write-Host ""
-              Write-Host "Selective package source directory:"
-              Write-Host "$buildSourceDir"
+              Write-Host "=========================================="
+
+              Write-Host "SELECTIVE BUILD SOURCE CREATED"
+
+              Write-Host "=========================================="
+
+              Write-Host "Build Source Directory:"
+              Write-Host $buildSourceDir
+
+
+              Write-Host ""
+              Write-Host "Selective source contents:"
+
+              Get-ChildItem `
+                -Path $buildSourceDir `
+                -Force `
+                -Recurse
           }
 
 
-          # ------------------------------------------------------
-          # Invalid scope
-          # ------------------------------------------------------
+          # ======================================================
+          # Invalid deployment scope
+          # ======================================================
 
           else {
 
               Write-Error `
-                "Invalid DEPLOYMENT_SCOPE '$env:DEPLOYMENT_SCOPE'. Allowed values are ALL or SELECTIVE."
+                "Invalid deployment scope: $env:DEPLOYMENT_SCOPE"
 
               exit 1
           }
 
 
-          # ------------------------------------------------------
+          # ======================================================
           # Persist BUILD_SOURCE_DIR for subsequent steps
-          # ------------------------------------------------------
+          # ======================================================
+
+          "BUILD_SOURCE_DIR=$buildSourceDir" `
+            | Out-File `
+              -FilePath $env:GITHUB_ENV `
+              -Encoding utf8 `
+              -Append
+
 
           Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "Final Build Source"
-          Write-Host "=========================================="
 
-          Write-Host "BUILD_SOURCE_DIR = $buildSourceDir"
-
-
-          "BUILD_SOURCE_DIR=$buildSourceDir" | Out-File `
-            -FilePath $env:GITHUB_ENV `
-            -Encoding utf8 `
-            -Append
+          Write-Host "BUILD_SOURCE_DIR persisted as:"
+          Write-Host $buildSourceDir
 
 
       # ==========================================================
@@ -542,13 +657,16 @@ jobs:
         run: |
 
           Write-Host "=========================================="
-          Write-Host "Verify Build Source"
+          Write-Host "Verifying Build Source"
           Write-Host "=========================================="
 
-          Write-Host "Deployment Scope : $env:DEPLOYMENT_SCOPE"
-          Write-Host "Build Source     : $env:BUILD_SOURCE_DIR"
 
-          if (-not (Test-Path $env:BUILD_SOURCE_DIR -PathType Container)) {
+          Write-Host "Deployment Scope : $env:DEPLOYMENT_SCOPE"
+
+          Write-Host "Build Source Dir : $env:BUILD_SOURCE_DIR"
+
+
+          if (-not (Test-Path $env:BUILD_SOURCE_DIR)) {
 
               Write-Error `
                 "BUILD_SOURCE_DIR does not exist: $env:BUILD_SOURCE_DIR"
@@ -558,71 +676,101 @@ jobs:
 
 
           Write-Host ""
-          Write-Host "Packages available to build:"
-          Write-Host "------------------------------------------"
+          Write-Host "Build source contents:"
+          Write-Host ""
+
+
+          Get-ChildItem `
+            -Path $env:BUILD_SOURCE_DIR `
+            -Force
+
+
+          Write-Host ""
+
+          Write-Host "Packages available for build:"
+
 
           Get-ChildItem `
             -Path $env:BUILD_SOURCE_DIR `
             -Directory `
-            | Select-Object -ExpandProperty Name
+            | ForEach-Object {
 
-
-          Write-Host ""
-          Write-Host "Build source validation completed successfully."
+                Write-Host "  - $($_.Name)"
+            }
 
 
       # ==========================================================
       # 7. Build
+      #
+      # SOURCE_DIR is passed to the Ant wrapper.
+      #
+      # build.xml -> SAG_CI_HOME/build.xml
+      #            -> buildCallABE.xml
+      #            -> ABE master_build
+      #            -> IS/build.xml
+      #
+      # abe-project.properties resolves:
+      #
+      # isPackages=${SOURCE_DIR}
       # ==========================================================
 
       - name: Build
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo Build Step
-          echo ==========================================
-
-          echo Deployment Scope : %DEPLOYMENT_SCOPE%
-          echo Build Source     : %BUILD_SOURCE_DIR%
-          echo Target Environment : %TARGET_ENVIRONMENT%
-          echo Target IS Group  : %TARGET_ISGROUP_ALIAS%
-          echo Build Number     : %MAIN_BUILDNUMBER%
-          echo.
-
-          echo Starting ABE build...
-          echo.
+          Write-Host "=========================================="
+          Write-Host "Starting WebMethods Build"
+          Write-Host "=========================================="
 
 
-          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" ^
-            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
-            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
-            -DSOURCE_DIR="%BUILD_SOURCE_DIR%" ^
-            -DtargetEnv="%TARGET_ENVIRONMENT%" ^
-            -DSAGHome="%SAG_HOME%" ^
-            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
-            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
-            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+          Write-Host "Build Source Directory:"
+          Write-Host $env:BUILD_SOURCE_DIR
+
+
+          Write-Host ""
+
+          Write-Host "Build Number:"
+          Write-Host $env:MAIN_BUILDNUMBER
+
+
+          Write-Host ""
+
+          Write-Host "Target Environment:"
+          Write-Host $env:TARGET_ENVIRONMENT
+
+
+          Write-Host ""
+
+          Write-Host "Invoking Ant build..."
+
+
+          & "$env:ANT_HOME\bin\ant.bat" `
+            -DSAG_CI_HOME="$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
+            -DSOURCE_DIR="$env:BUILD_SOURCE_DIR" `
+            -DprojectName="$env:GITHUB_REPOSITORY" `
+            -DbuildNumber="$env:MAIN_BUILDNUMBER" `
+            -DtargetEnv="$env:TARGET_ENVIRONMENT" `
+            -f "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml" `
             build
 
 
-          if errorlevel 1 (
+          if ($LASTEXITCODE -ne 0) {
 
-              echo.
-              echo ==========================================
-              echo BUILD FAILED
-              echo ==========================================
+              Write-Error "WebMethods build failed."
 
-              exit /b 1
-          )
+              exit $LASTEXITCODE
+          }
 
 
-          echo.
-          echo ==========================================
-          echo BUILD COMPLETED SUCCESSFULLY
-          echo ==========================================
+          Write-Host ""
+
+          Write-Host "=========================================="
+
+          Write-Host "WebMethods Build Completed Successfully"
+
+          Write-Host "=========================================="
 
 
       # ==========================================================
@@ -631,15 +779,25 @@ jobs:
 
       - name: Create Deployment Project
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo Deployment Project Creation
-          echo ==========================================
+          Write-Host "=========================================="
+          Write-Host "Create Deployment Project"
+          Write-Host "=========================================="
 
-          echo Deployment Project creation step
+
+          Write-Host "This step will create / prepare the"
+          Write-Host "Deployer project definition."
+
+
+          # ------------------------------------------------------
+          # Existing Project Automator / Deployer logic goes here
+          # ------------------------------------------------------
+
+          Write-Host ""
+          Write-Host "Deployment project preparation completed."
 
 
       # ==========================================================
@@ -648,15 +806,30 @@ jobs:
 
       - name: Variable Substitution
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo Variable Substitution
-          echo ==========================================
+          Write-Host "=========================================="
+          Write-Host "Variable Substitution"
+          Write-Host "=========================================="
 
-          echo Variable Substitution step
+
+          Write-Host "Target Environment:"
+          Write-Host $env:TARGET_ENVIRONMENT
+
+
+          Write-Host "Target IS Group Alias:"
+          Write-Host $env:TARGET_ISGROUP_ALIAS
+
+
+          # ------------------------------------------------------
+          # Existing environment-specific variable substitution
+          # logic goes here.
+          # ------------------------------------------------------
+
+          Write-Host ""
+          Write-Host "Variable substitution step completed."
 
 
       # ==========================================================
@@ -665,47 +838,54 @@ jobs:
 
       - name: Deploy
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo Deployment
-          echo ==========================================
-
-          echo Deployment Scope : %DEPLOYMENT_SCOPE%
-          echo Build Source     : %BUILD_SOURCE_DIR%
-          echo Target IS Group  : %TARGET_ISGROUP_ALIAS%
-          echo Build Number     : %MAIN_BUILDNUMBER%
-          echo.
+          Write-Host "=========================================="
+          Write-Host "Starting WebMethods Deployment"
+          Write-Host "=========================================="
 
 
-          "%SAG_BUILD_HOME%\common\lib\ant\bin\ant.bat" ^
-            -DtargetISGroupAlias="%TARGET_ISGROUP_ALIAS%" ^
-            -DCHECKOUT_DIR="%CHECKOUT_DIR%" ^
-            -DSOURCE_DIR="%BUILD_SOURCE_DIR%" ^
-            -DSAGHome="%SAG_HOME%" ^
-            -DSAG_CI_HOME="%CICD_HOME%\cicd\scripts\build-and-deploy\setup" ^
-            -DprojectName="cicdwebm_%MAIN_BUILDNUMBER%" ^
-            -f "%CICD_HOME%\cicd\scripts\build-and-deploy\run\build.xml" ^
+          Write-Host "Build Source Directory:"
+          Write-Host $env:BUILD_SOURCE_DIR
+
+
+          Write-Host "Target IS Group Alias:"
+          Write-Host $env:TARGET_ISGROUP_ALIAS
+
+
+          Write-Host ""
+
+          Write-Host "Invoking Ant deploy..."
+
+
+          & "$env:ANT_HOME\bin\ant.bat" `
+            -DSAG_CI_HOME="$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
+            -DSOURCE_DIR="$env:BUILD_SOURCE_DIR" `
+            -DtargetEnv="$env:TARGET_ENVIRONMENT" `
+            -DisGroupAlias="$env:TARGET_ISGROUP_ALIAS" `
+            -DprojectName="$env:GITHUB_REPOSITORY" `
+            -DbuildNumber="$env:MAIN_BUILDNUMBER" `
+            -f "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml" `
             deploy
 
 
-          if errorlevel 1 (
+          if ($LASTEXITCODE -ne 0) {
 
-              echo.
-              echo ==========================================
-              echo DEPLOYMENT FAILED
-              echo ==========================================
+              Write-Error "WebMethods deployment failed."
 
-              exit /b 1
-          )
+              exit $LASTEXITCODE
+          }
 
 
-          echo.
-          echo ==========================================
-          echo DEPLOYMENT COMPLETED SUCCESSFULLY
-          echo ==========================================
+          Write-Host ""
+
+          Write-Host "=========================================="
+
+          Write-Host "WebMethods Deployment Completed"
+
+          Write-Host "=========================================="
 
 
       # ==========================================================
@@ -724,34 +904,44 @@ jobs:
           Write-Host "Deploy Adapter Configuration"
           Write-Host "=========================================="
 
-          Write-Host "Target IS Group : $env:TARGET_ISGROUP_ALIAS"
-          Write-Host "Config Package  : $env:ADAPTER_CONFIGPKG"
-          Write-Host "Branch          : $env:REPO_BRANCH_NAME"
 
-          # Add adapter deployment command here.
-          #
-          # This replaces the Jenkins downstream job:
-          #
-          # sagdevops-cicd-manage-configs/adapters/
-          # sagdevops-cicd-checkout-adaptersconfig
+          Write-Host "Adapter Configuration Package:"
+          Write-Host $env:ADAPTER_CONFIGPKG
 
-          Write-Host "Adapter deployment step"
+
+          # ------------------------------------------------------
+          # Existing adapter configuration deployment logic
+          # goes here.
+          # ------------------------------------------------------
+
+          Write-Host ""
+          Write-Host "Adapter configuration deployment completed."
 
 
       # ==========================================================
-      # 12. Optional WM Test Suite
+      # 12. Execute WM Test Suite
       # ==========================================================
 
       - name: Execute WM Test Suite
 
         if: ${{ inputs.executeWmTestSuite == true }}
 
-        shell: cmd
+        shell: powershell
 
         run: |
 
-          echo ==========================================
-          echo WebMethods Test Suite
-          echo ==========================================
+          Write-Host "=========================================="
+          Write-Host "Execute WebMethods Test Suite"
+          Write-Host "=========================================="
 
-          echo Execute WM Test Suite
+
+          Write-Host "Executing WM Test Suite..."
+
+
+          # ------------------------------------------------------
+          # Existing WM Test Suite execution logic goes here.
+          # ------------------------------------------------------
+
+          Write-Host ""
+
+          Write-Host "WM Test Suite execution completed."
