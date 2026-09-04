@@ -1,4 +1,4 @@
-name: Thermofisher_Dev
+name: Thermofisher_NonProd
 
 on:
   workflow_dispatch:
