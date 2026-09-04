@@ -676,12 +676,12 @@ jobs:
 
 
           & $antExecutable `
-              "-DSAGHome=$env:SAG_HOME" `
-              "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
-              "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
-              "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
-              "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
-              "-DprojectName=$env:PROJECT_NAME" `
+              ("-DSAGHome={0}" -f $env:SAG_HOME) `
+              ("-DSAG_CI_HOME={0}/cicd/scripts/build-and-deploy/setup" -f $env:CICD_HOME) `
+              ("-DSOURCE_DIR={0}" -f $env:BUILD_SOURCE_DIR) `
+              ("-DtargetEnv={0}" -f $env:TARGET_ENVIRONMENT) `
+              ("-DbuildNumber={0}" -f $env:MAIN_BUILDNUMBER) `
+              ("-DprojectName={0}" -f $env:PROJECT_NAME) `
               -f "$antBuildFile" `
               build
 
@@ -826,36 +826,30 @@ jobs:
           Write-Host ""
 
 
-          $antArguments = @(
-              "-DSAGHome=$env:SAG_HOME"
-              "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup"
-              "-Daction=$env:ACTION"
-              "-DbuildToDeploy=$env:BUILD_TO_DEPLOY"
-              "-DbuildBackupDir=C:/buildsBackup"
-              "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR"
-              "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS"
-              "-DbuildNumber=$env:MAIN_BUILDNUMBER"
-              "-DprojectName=$env:PROJECT_NAME"
-              "-f"
-              "$antBuildFile"
-              "deploy"
-          )
-
-          Write-Host ""
-          Write-Host "=================================================="
-          Write-Host "Ant command arguments"
-          Write-Host "=================================================="
-
-          foreach ($argument in $antArguments) {
-              Write-Host "[$argument]"
-          }
-
           Write-Host ""
           Write-Host "=================================================="
           Write-Host "Executing Ant"
           Write-Host "=================================================="
 
-          & $antExecutable @antArguments
+          # IMPORTANT:
+          # Pass every -D option as a separate PowerShell argument.
+          # This matches the manually successful command:
+          #
+          # .\ant.bat '-DSAGHome=...' '-DSAG_CI_HOME=...' ...
+          #
+          # Do NOT build an argument array and splat it into ant.bat.
+
+          & $antExecutable `
+              ("-DSAGHome={0}" -f $env:SAG_HOME) `
+              ("-DSAG_CI_HOME={0}/cicd/scripts/build-and-deploy/setup" -f $env:CICD_HOME) `
+              ("-Daction={0}" -f $env:ACTION) `
+              ("-DbuildToDeploy={0}" -f $env:BUILD_TO_DEPLOY) `
+              "-DbuildBackupDir=C:/buildsBackup" `
+              ("-DtargetISGroupAlias={0}" -f $env:TARGET_ISGROUP_ALIAS) `
+              ("-DbuildNumber={0}" -f $env:MAIN_BUILDNUMBER) `
+              ("-DprojectName={0}" -f $env:PROJECT_NAME) `
+              -f "$antBuildFile" `
+              deploy
 
 
           if ($LASTEXITCODE -ne 0) {
