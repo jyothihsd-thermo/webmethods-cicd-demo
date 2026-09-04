@@ -144,11 +144,13 @@ jobs:
 
           Write-Host "Target Environment    : [$env:TARGET_ENVIRONMENT]"
           Write-Host "Deployment Scope      : [$env:DEPLOYMENT_SCOPE]"
+          Write-Host "Package List          : [$env:ISPACKAGES_LIST]"
           Write-Host "Project Name          : [$env:PROJECT_NAME]"
           Write-Host "Target IS Group Alias : [$env:TARGET_ISGROUP_ALIAS]"
           Write-Host "Build Number          : [$env:MAIN_BUILDNUMBER]"
           Write-Host "Repository Branch     : [$env:REPO_BRANCH_NAME]"
           Write-Host "Has Adapter Package   : [$env:HAS_ADAPTERPKG]"
+          Write-Host "Adapter Config        : [$env:ADAPTER_CONFIGPKG]"
           Write-Host "Execute WM Test       : [$env:EXECUTE_WMTEST]"
 
           if ([string]::IsNullOrWhiteSpace($env:TARGET_ENVIRONMENT)) {
@@ -171,12 +173,12 @@ jobs:
               exit 1
           }
 
-          if (
-              $env:DEPLOYMENT_SCOPE -eq "SELECTIVE" -and
-              [string]::IsNullOrWhiteSpace($env:ISPACKAGES_LIST)
-          ) {
-              Write-Error "Package name(s) are required when deployment scope is SELECTIVE."
-              exit 1
+          if ($env:DEPLOYMENT_SCOPE -eq "SELECTIVE") {
+
+              if ([string]::IsNullOrWhiteSpace($env:ISPACKAGES_LIST)) {
+                  Write-Error "Package name(s) are required when deployment scope is SELECTIVE."
+                  exit 1
+              }
           }
 
           Write-Host ""
@@ -195,29 +197,30 @@ jobs:
           Write-Host "Mirroring GitHub workspace"
           Write-Host "=================================================="
 
-          Write-Host "Source      : $env:GITHUB_WORKSPACE"
-          Write-Host "Destination : $env:CHECKOUT_DIR"
+          Write-Host "Source      : [$env:GITHUB_WORKSPACE]"
+          Write-Host "Destination : [$env:CHECKOUT_DIR]"
 
           if (-not (Test-Path $env:CHECKOUT_DIR)) {
-              New-Item -ItemType Directory -Path $env:CHECKOUT_DIR -Force | Out-Null
+              New-Item `
+                  -ItemType Directory `
+                  -Path $env:CHECKOUT_DIR `
+                  -Force |
+                  Out-Null
           }
 
           robocopy `
-            "$env:GITHUB_WORKSPACE" `
-            "$env:CHECKOUT_DIR" `
-            /MIR `
-            /XD ".git"
+              "$env:GITHUB_WORKSPACE" `
+              "$env:CHECKOUT_DIR" `
+              /MIR `
+              /XD ".git"
 
           $robocopyExitCode = $LASTEXITCODE
 
           Write-Host "Robocopy exit code: $robocopyExitCode"
 
-          # Robocopy:
-          # 0-7  = success / successful copy with differences
-          # 8+   = failure
-
           if ($robocopyExitCode -ge 8) {
-              Write-Error "Repository mirror failed. Robocopy exit code: $robocopyExitCode"
+              Write-Error `
+                  "Repository mirror failed. Robocopy exit code: $robocopyExitCode"
               exit 1
           }
 
@@ -226,6 +229,16 @@ jobs:
 
       # ============================================================
       # 4. Prepare Build Source
+      #
+      # ALL:
+      #   C:/SoftwareAG/tools/Checkout/is/packages
+      #
+      # SELECTIVE:
+      #   C:/SoftwareAG/tools/CheckoutSelective
+      #
+      # Robocopy exit codes:
+      #   0-7 = success
+      #   8+  = failure
       # ============================================================
 
       - name: Prepare Build Source
@@ -239,6 +252,10 @@ jobs:
           Write-Host "Deployment Scope : [$env:DEPLOYMENT_SCOPE]"
           Write-Host "Package List     : [$env:ISPACKAGES_LIST]"
 
+          # --------------------------------------------------------
+          # ALL PACKAGE DEPLOYMENT
+          # --------------------------------------------------------
+
           if ($env:DEPLOYMENT_SCOPE -eq "ALL") {
 
               $buildSourceDir = "$env:CHECKOUT_DIR/is/packages"
@@ -246,26 +263,54 @@ jobs:
               Write-Host ""
               Write-Host "ALL deployment selected."
               Write-Host "Build source directory:"
-              Write-Host "$buildSourceDir"
+              Write-Host "[$buildSourceDir]"
 
               if (-not (Test-Path $buildSourceDir)) {
-                  Write-Error "Build source directory does not exist: $buildSourceDir"
+
+                  Write-Error `
+                      "Build source directory does not exist: $buildSourceDir"
+
                   exit 1
               }
-
           }
-          else {
+
+          # --------------------------------------------------------
+          # SELECTIVE PACKAGE DEPLOYMENT
+          # --------------------------------------------------------
+
+          elseif ($env:DEPLOYMENT_SCOPE -eq "SELECTIVE") {
 
               Write-Host ""
               Write-Host "SELECTIVE deployment selected."
 
               $buildSourceDir = $env:SELECTIVE_SOURCE_DIR
 
+              Write-Host "Selective build source directory:"
+              Write-Host "[$buildSourceDir]"
+
+              # Clean previous selective build source
+
               if (Test-Path $buildSourceDir) {
-                  Remove-Item $buildSourceDir -Recurse -Force
+
+                  Write-Host ""
+                  Write-Host "Cleaning previous selective source directory."
+
+                  Remove-Item `
+                      $buildSourceDir `
+                      -Recurse `
+                      -Force
               }
 
-              New-Item -ItemType Directory -Path $buildSourceDir -Force | Out-Null
+              New-Item `
+                  -ItemType Directory `
+                  -Path $buildSourceDir `
+                  -Force |
+                  Out-Null
+
+
+              # ----------------------------------------------------
+              # Parse comma-separated package names
+              # ----------------------------------------------------
 
               $packages = $env:ISPACKAGES_LIST `
                   -split "," |
@@ -277,17 +322,37 @@ jobs:
                   } |
                   Select-Object -Unique
 
+
               if ($packages.Count -eq 0) {
-                  Write-Error "No valid package names were supplied for SELECTIVE deployment."
+
+                  Write-Error `
+                      "No valid package names were supplied for SELECTIVE deployment."
+
                   exit 1
               }
+
+
+              Write-Host ""
+              Write-Host "Packages selected for deployment:"
+
+              foreach ($package in $packages) {
+                  Write-Host "  - [$package]"
+              }
+
+
+              # ----------------------------------------------------
+              # Copy each selected package
+              # ----------------------------------------------------
 
               foreach ($packageName in $packages) {
 
                   Write-Host ""
+                  Write-Host "--------------------------------------------------"
                   Write-Host "Processing package: [$packageName]"
+                  Write-Host "--------------------------------------------------"
 
-                  # Prevent path traversal / invalid path input
+
+                  # Prevent path traversal / invalid paths
 
                   if (
                       $packageName.Contains("..") -or
@@ -295,9 +360,13 @@ jobs:
                       $packageName.Contains("\") -or
                       $packageName.Contains(":")
                   ) {
-                      Write-Error "Invalid package name: [$packageName]"
+
+                      Write-Error `
+                          "Invalid package name: [$packageName]"
+
                       exit 1
                   }
+
 
                   $sourcePackage = Join-Path `
                       "$env:CHECKOUT_DIR/is/packages" `
@@ -307,19 +376,37 @@ jobs:
                       $buildSourceDir `
                       $packageName
 
-                  Write-Host "Source package : [$sourcePackage]"
-                  Write-Host "Target package : [$targetPackage]"
+
+                  Write-Host "Source package:"
+                  Write-Host "[$sourcePackage]"
+
+                  Write-Host "Target package:"
+                  Write-Host "[$targetPackage]"
+
+
+                  # Validate source package
 
                   if (-not (Test-Path $sourcePackage)) {
-                      Write-Error "Package does not exist: $sourcePackage"
+
+                      Write-Error `
+                          "Package does not exist: $sourcePackage"
+
                       exit 1
                   }
+
+
+                  # Create target package directory
 
                   New-Item `
                       -ItemType Directory `
                       -Path $targetPackage `
                       -Force |
                       Out-Null
+
+
+                  # ------------------------------------------------
+                  # Robocopy
+                  # ------------------------------------------------
 
                   robocopy `
                       "$sourcePackage" `
@@ -328,23 +415,60 @@ jobs:
 
                   $robocopyExitCode = $LASTEXITCODE
 
+                  Write-Host ""
                   Write-Host "Robocopy exit code: $robocopyExitCode"
 
+
+                  # Robocopy:
+                  # 0-7 = successful completion
+                  # 8+  = failure
+
                   if ($robocopyExitCode -ge 8) {
-                      Write-Error "Failed to copy package [$packageName]."
+
+                      Write-Error `
+                          "Failed to copy package [$packageName]. Robocopy exit code: $robocopyExitCode"
+
                       exit 1
                   }
+
+                  Write-Host `
+                      "Package [$packageName] copied successfully."
               }
           }
 
+          else {
+
+              Write-Error `
+                  "Invalid deployment scope: [$env:DEPLOYMENT_SCOPE]"
+
+              exit 1
+          }
+
+
+          # ========================================================
+          # Persist BUILD_SOURCE_DIR for subsequent workflow steps
+          # ========================================================
+
           Write-Host ""
-          Write-Host "BUILD_SOURCE_DIR=$buildSourceDir"
+          Write-Host "=================================================="
+          Write-Host "Build source prepared successfully"
+          Write-Host "=================================================="
+
+          Write-Host "BUILD_SOURCE_DIR = [$buildSourceDir]"
 
           "BUILD_SOURCE_DIR=$buildSourceDir" |
               Out-File `
                   $env:GITHUB_ENV `
                   -Encoding utf8 `
                   -Append
+
+
+          # IMPORTANT:
+          # Robocopy may return 1-7 even when the copy succeeded.
+          # Explicitly return 0 so GitHub Actions marks this step
+          # as successful.
+
+          exit 0
 
 
       # ============================================================
@@ -362,12 +486,16 @@ jobs:
           Write-Host "BUILD_SOURCE_DIR = [$env:BUILD_SOURCE_DIR]"
 
           if ([string]::IsNullOrWhiteSpace($env:BUILD_SOURCE_DIR)) {
+
               Write-Error "BUILD_SOURCE_DIR is not set."
               exit 1
           }
 
           if (-not (Test-Path $env:BUILD_SOURCE_DIR)) {
-              Write-Error "BUILD_SOURCE_DIR does not exist: $env:BUILD_SOURCE_DIR"
+
+              Write-Error `
+                  "BUILD_SOURCE_DIR does not exist: $env:BUILD_SOURCE_DIR"
+
               exit 1
           }
 
@@ -379,6 +507,8 @@ jobs:
               -Directory |
               Select-Object Name, FullName |
               Format-Table -AutoSize
+
+          exit 0
 
 
       # ============================================================
@@ -395,33 +525,51 @@ jobs:
 
           $antExecutable = "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
 
-          $antBuildFile = "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
+          $antBuildFile = `
+              "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
 
-          $abeBuildProperties = "$env:SAG_HOME/common/AssetBuildEnvironment/master_build/build.properties"
+          $abeBuildProperties = `
+              "$env:SAG_HOME/common/AssetBuildEnvironment/master_build/build.properties"
 
-          Write-Host "SAG_HOME            : [$env:SAG_HOME]"
-          Write-Host "CICD_HOME           : [$env:CICD_HOME]"
-          Write-Host "Ant executable      : [$antExecutable]"
-          Write-Host "Ant build file      : [$antBuildFile]"
-          Write-Host "ABE build.properties: [$abeBuildProperties]"
+
+          Write-Host "SAG_HOME             : [$env:SAG_HOME]"
+          Write-Host "CICD_HOME            : [$env:CICD_HOME]"
+          Write-Host "Ant executable       : [$antExecutable]"
+          Write-Host "Ant build file       : [$antBuildFile]"
+          Write-Host "ABE build.properties : [$abeBuildProperties]"
+
 
           if (-not (Test-Path $antExecutable)) {
-              Write-Error "Ant executable does not exist: $antExecutable"
+
+              Write-Error `
+                  "Ant executable does not exist: $antExecutable"
+
               exit 1
           }
+
 
           if (-not (Test-Path $antBuildFile)) {
-              Write-Error "CI/CD Ant build file does not exist: $antBuildFile"
+
+              Write-Error `
+                  "CI/CD Ant build file does not exist: $antBuildFile"
+
               exit 1
           }
 
+
           if (-not (Test-Path $abeBuildProperties)) {
-              Write-Error "ABE build.properties does not exist: $abeBuildProperties"
+
+              Write-Error `
+                  "ABE build.properties does not exist: $abeBuildProperties"
+
               exit 1
           }
+
 
           Write-Host ""
           Write-Host "ABE / Ant validation successful."
+
+          exit 0
 
 
       # ============================================================
@@ -436,9 +584,13 @@ jobs:
           Write-Host "Starting ABE build"
           Write-Host "=================================================="
 
-          $antExecutable = "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
 
-          $antBuildFile = "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
+          $antExecutable = `
+              "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
+
+          $antBuildFile = `
+              "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
+
 
           Write-Host "SAG_HOME         = [$env:SAG_HOME]"
           Write-Host "SAG_CI_HOME      = [$env:CICD_HOME/cicd/scripts/build-and-deploy/setup]"
@@ -448,27 +600,33 @@ jobs:
           Write-Host "projectName      = [$env:PROJECT_NAME]"
           Write-Host ""
 
+
           & $antExecutable `
-            "-DSAGHome=$env:SAG_HOME" `
-            "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
-            "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
-            "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
-            "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
-            "-DprojectName=$env:PROJECT_NAME" `
-            -f "$antBuildFile" `
-            build
+              "-DSAGHome=$env:SAG_HOME" `
+              "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
+              "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
+              "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
+              "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
+              "-DprojectName=$env:PROJECT_NAME" `
+              -f "$antBuildFile" `
+              build
+
 
           if ($LASTEXITCODE -ne 0) {
+
               Write-Error "webMethods ABE build failed."
               exit 1
           }
 
+
           Write-Host ""
           Write-Host "ABE build completed successfully."
 
+          exit 0
+
 
       # ============================================================
-      # 8. Project Automator / Deployment Configuration
+      # 8. Prepare Deployment Configuration
       # ============================================================
 
       - name: Prepare Deployment Configuration
@@ -479,38 +637,46 @@ jobs:
           Write-Host "Preparing deployment configuration"
           Write-Host "=================================================="
 
-          Write-Host "Project Name          = [$env:PROJECT_NAME]"
-          Write-Host "Target Environment    = [$env:TARGET_ENVIRONMENT]"
-          Write-Host "Target IS Group Alias = [$env:TARGET_ISGROUP_ALIAS]"
-          Write-Host "Build Number          = [$env:MAIN_BUILDNUMBER]"
-          Write-Host "Adapter Package       = [$env:HAS_ADAPTERPKG]"
-          Write-Host "Adapter Config Package= [$env:ADAPTER_CONFIGPKG]"
-          Write-Host "Execute WM Test       = [$env:EXECUTE_WMTEST]"
 
-          Write-Host ""
-          Write-Host "Project Automator directory:"
-          Write-Host "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/ProjectAutomator"
+          Write-Host "Project Name           = [$env:PROJECT_NAME]"
+          Write-Host "Target Environment     = [$env:TARGET_ENVIRONMENT]"
+          Write-Host "Target IS Group Alias  = [$env:TARGET_ISGROUP_ALIAS]"
+          Write-Host "Build Number           = [$env:MAIN_BUILDNUMBER]"
+          Write-Host "Adapter Package        = [$env:HAS_ADAPTERPKG]"
+          Write-Host "Adapter Config Package = [$env:ADAPTER_CONFIGPKG]"
+          Write-Host "Execute WM Test        = [$env:EXECUTE_WMTEST]"
+
 
           if ($env:HAS_ADAPTERPKG -eq "true") {
 
               Write-Host ""
               Write-Host "Adapter package deployment requested."
 
+
               if ([string]::IsNullOrWhiteSpace($env:ADAPTER_CONFIGPKG)) {
-                  Write-Error "Adapter configuration package is required when hasAdapterPackage is true."
+
+                  Write-Error `
+                      "Adapter configuration package is required when hasAdapterPackage is true."
+
                   exit 1
               }
 
-              Write-Host "Adapter configuration package: [$env:ADAPTER_CONFIGPKG]"
+
+              Write-Host `
+                  "Adapter configuration package: [$env:ADAPTER_CONFIGPKG]"
           }
           else {
+
               Write-Host ""
               Write-Host "No Adapter package deployment requested."
           }
 
 
+          exit 0
+
+
       # ============================================================
-      # 9. Optional webMethods Test Suite
+      # 9. Execute webMethods Test Suite
       # ============================================================
 
       - name: Execute webMethods Test Suite
@@ -524,8 +690,10 @@ jobs:
 
           Write-Host "Test Suite execution requested."
 
-          # Add the WM Test Suite execution command here
+          # Add WM Test Suite execution command here
           # when the test execution command is finalized.
+
+          exit 0
 
 
       # ============================================================
@@ -540,44 +708,74 @@ jobs:
           Write-Host "Starting webMethods deployment"
           Write-Host "=================================================="
 
-          $antExecutable = "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
 
-          $antBuildFile = "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
+          $antExecutable = `
+              "$env:SAG_HOME/common/lib/ant/bin/ant.bat"
 
+          $antBuildFile = `
+              "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/build.xml"
+
+
+          Write-Host ""
           Write-Host "Deployment parameters:"
-          Write-Host "SAG_HOME              = [$env:SAG_HOME]"
-          Write-Host "SAG_CI_HOME           = [$env:CICD_HOME/cicd/scripts/build-and-deploy/setup]"
-          Write-Host "SOURCE_DIR            = [$env:BUILD_SOURCE_DIR]"
-          Write-Host "targetEnv             = [$env:TARGET_ENVIRONMENT]"
-          Write-Host "targetISGroupAlias    = [$env:TARGET_ISGROUP_ALIAS]"
-          Write-Host "buildNumber           = [$env:MAIN_BUILDNUMBER]"
-          Write-Host "projectName           = [$env:PROJECT_NAME]"
+          Write-Host "SAG_HOME             = [$env:SAG_HOME]"
+          Write-Host "SAG_CI_HOME          = [$env:CICD_HOME/cicd/scripts/build-and-deploy/setup]"
+          Write-Host "SOURCE_DIR           = [$env:BUILD_SOURCE_DIR]"
+          Write-Host "targetEnv            = [$env:TARGET_ENVIRONMENT]"
+          Write-Host "targetISGroupAlias   = [$env:TARGET_ISGROUP_ALIAS]"
+          Write-Host "buildNumber          = [$env:MAIN_BUILDNUMBER]"
+          Write-Host "projectName          = [$env:PROJECT_NAME]"
           Write-Host ""
 
+
           # IMPORTANT:
-          # The Ant property must be targetISGroupAlias.
-          # Do NOT use -DisGroupAlias here.
+          #
+          # buildDeployer.xml expects:
+          #
+          #     targetISGroupAlias
+          #
+          # Therefore the command line MUST use:
+          #
+          #     -DtargetISGroupAlias
+          #
+          # Do NOT use:
+          #
+          #     -DisGroupAlias
+          #
+
+          Write-Host "Ant target alias argument:"
+          Write-Host "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS"
+          Write-Host ""
+
 
           & $antExecutable `
-            "-DSAGHome=$env:SAG_HOME" `
-            "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
-            "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
-            "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
-            "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS" `
-            "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
-            "-DprojectName=$env:PROJECT_NAME" `
-            -f "$antBuildFile" `
-            deploy
+              "-DSAGHome=$env:SAG_HOME" `
+              "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
+              "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
+              "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
+              "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS" `
+              "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
+              "-DprojectName=$env:PROJECT_NAME" `
+              -f "$antBuildFile" `
+              deploy
+
 
           if ($LASTEXITCODE -ne 0) {
-              Write-Error "WebMethods Deployer execution failed."
+
+              Write-Error `
+                  "WebMethods Deployer execution failed."
+
               exit 1
           }
+
 
           Write-Host ""
           Write-Host "=================================================="
           Write-Host "Deployment completed successfully."
           Write-Host "=================================================="
+
+
+          exit 0
 
 
       # ============================================================
@@ -592,24 +790,36 @@ jobs:
           Write-Host "Verifying generated Deployer specification"
           Write-Host "=================================================="
 
-          $specFile = "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/ProjectAutomator/$env:PROJECT_NAME" + "DeploymentSpec.xml"
+
+          $specFile = `
+              "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/ProjectAutomator/$env:PROJECT_NAME" +
+              "DeploymentSpec.xml"
+
 
           Write-Host "Specification file:"
-          Write-Host "$specFile"
+          Write-Host "[$specFile]"
+
 
           if (-not (Test-Path $specFile)) {
-              Write-Error "Deployer specification was not found: $specFile"
+
+              Write-Error `
+                  "Deployer specification was not found: $specFile"
+
               exit 1
           }
+
 
           Write-Host ""
           Write-Host "Target IS alias from generated specification:"
 
+
           Get-Content $specFile |
               Select-String -Pattern "<alias"
 
+
           $aliasLine = Get-Content $specFile |
               Select-String -Pattern '<alias type="IS">'
+
 
           if ($aliasLine -notmatch [regex]::Escape($env:TARGET_ISGROUP_ALIAS)) {
 
@@ -619,5 +829,9 @@ jobs:
               exit 1
           }
 
+
           Write-Host ""
-          Write-Host "Generated Deployer specification contains the expected target alias."
+          Write-Host "Generated Deployer specification contains the expected target alias:"
+          Write-Host "[$env:TARGET_ISGROUP_ALIAS]"
+
+          exit 0
