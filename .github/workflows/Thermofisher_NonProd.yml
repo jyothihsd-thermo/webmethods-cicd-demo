@@ -124,7 +124,7 @@ jobs:
 
       SAG_BUILD_HOME: "C:/SoftwareAG11_ABE"
 
-      SAG_HOME: "C:/SoftwareAG11"
+      SAG_HOME: "C:/SoftwareAG11_ABE"
 
       ANT_HOME: "C:/SoftwareAG11_ABE/common/lib/ant"
 
