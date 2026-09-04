@@ -757,65 +757,7 @@ jobs:
 
 
       # ============================================================
-      # 10. Verify Generated Deployer Specification
-      # ============================================================
-
-      - name: Verify Generated Deployer Specification
-        if: ${{ inputs.action != 'Build' }}
-        shell: powershell
-        run: |
-
-          Write-Host "=================================================="
-          Write-Host "Verifying generated Deployer specification"
-          Write-Host "=================================================="
-
-
-          $specFile = `
-              "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/ProjectAutomator/$env:PROJECT_NAME" +
-              "DeploymentSpec.xml"
-
-
-          Write-Host "Specification file:"
-          Write-Host "[$specFile]"
-
-
-          if (-not (Test-Path $specFile)) {
-
-              Write-Error `
-                  "Deployer specification was not found: $specFile"
-
-              exit 1
-          }
-
-
-          Write-Host ""
-          Write-Host "Target IS alias from generated specification:"
-
-
-          Get-Content $specFile |
-              Select-String -Pattern "<alias"
-
-
-          $aliasLine = Get-Content $specFile |
-              Select-String -Pattern '<alias type="IS">'
-
-
-          if ($aliasLine -notmatch [regex]::Escape($env:TARGET_ISGROUP_ALIAS)) {
-
-              Write-Error `
-                  "Generated Deployer specification does not contain expected target IS Group Alias [$env:TARGET_ISGROUP_ALIAS]."
-
-              exit 1
-          }
-
-
-          Write-Host ""
-          Write-Host "Generated Deployer specification contains the expected target alias:"
-          Write-Host "[$env:TARGET_ISGROUP_ALIAS]"
-
-          exit 0
-
-      # 11. Deploy using Project Automator + Deployer
+      # 10. Deploy using Project Automator + Deployer
       # ============================================================
 
       - name: Deploy with Project Automator and Deployer
@@ -903,3 +845,62 @@ jobs:
 
 
       # ============================================================
+
+# 11. Verify Generated Deployer Specification
+      # ============================================================
+
+      - name: Verify Generated Deployer Specification
+        if: ${{ inputs.action != 'Build' }}
+        shell: powershell
+        run: |
+
+          Write-Host "=================================================="
+          Write-Host "Verifying generated Deployer specification"
+          Write-Host "=================================================="
+
+
+          $specFile = `
+              "$env:CICD_HOME/cicd/scripts/build-and-deploy/run/ProjectAutomator/$env:PROJECT_NAME" +
+              "DeploymentSpec.xml"
+
+
+          Write-Host "Specification file:"
+          Write-Host "[$specFile]"
+
+
+          if (-not (Test-Path $specFile)) {
+
+              Write-Error `
+                  "Deployer specification was not found: $specFile"
+
+              exit 1
+          }
+
+
+          Write-Host ""
+          Write-Host "Target IS alias from generated specification:"
+
+
+          Get-Content $specFile |
+              Select-String -Pattern "<alias"
+
+
+          $aliasLine = Get-Content $specFile |
+              Select-String -Pattern '<alias type="IS">'
+
+
+          if ($aliasLine -notmatch [regex]::Escape($env:TARGET_ISGROUP_ALIAS)) {
+
+              Write-Error `
+                  "Generated Deployer specification does not contain expected target IS Group Alias [$env:TARGET_ISGROUP_ALIAS]."
+
+              exit 1
+          }
+
+
+          Write-Host ""
+          Write-Host "Generated Deployer specification contains the expected target alias:"
+          Write-Host "[$env:TARGET_ISGROUP_ALIAS]"
+
+          exit 0
+
