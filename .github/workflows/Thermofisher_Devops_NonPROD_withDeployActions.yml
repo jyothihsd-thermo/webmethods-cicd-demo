@@ -183,6 +183,21 @@ jobs:
               exit 1
           }
 
+          $projectName = $env:PROJECT_NAME.Trim()
+
+          if ([string]::IsNullOrWhiteSpace($projectName)) {
+              Write-Error "ABE/CI-CD project name cannot be empty."
+              exit 1
+          }
+
+          "PROJECT_NAME=$projectName" |
+              Out-File `
+                  $env:GITHUB_ENV `
+                  -Encoding utf8 `
+                  -Append
+
+          Write-Host "Normalized Project Name : [$projectName]"
+
           if ($env:ACTION -notin @("Build", "Build and Deploy", "Deploy")) {
               Write-Error "Invalid action: [$env:ACTION]. Allowed values are Build, Build and Deploy, Deploy."
               exit 1
@@ -811,19 +826,36 @@ jobs:
           Write-Host ""
 
 
-          & $antExecutable `
-              "-DSAGHome=$env:SAG_HOME" `
-              "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup" `
-              "-Daction=$env:ACTION" `
-              "-DbuildToDeploy=$env:BUILD_TO_DEPLOY" `
-              "-DbuildBackupDir=C:/buildsBackup" `
-              "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR" `
-              "-DtargetEnv=$env:TARGET_ENVIRONMENT" `
-              "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS" `
-              "-DbuildNumber=$env:MAIN_BUILDNUMBER" `
-              "-DprojectName=$env:PROJECT_NAME" `
-              -f "$antBuildFile" `
-              deploy
+          $antArguments = @(
+              "-DSAGHome=$env:SAG_HOME"
+              "-DSAG_CI_HOME=$env:CICD_HOME/cicd/scripts/build-and-deploy/setup"
+              "-Daction=$env:ACTION"
+              "-DbuildToDeploy=$env:BUILD_TO_DEPLOY"
+              "-DbuildBackupDir=C:/buildsBackup"
+              "-DSOURCE_DIR=$env:BUILD_SOURCE_DIR"
+              "-DtargetISGroupAlias=$env:TARGET_ISGROUP_ALIAS"
+              "-DbuildNumber=$env:MAIN_BUILDNUMBER"
+              "-DprojectName=$env:PROJECT_NAME"
+              "-f"
+              "$antBuildFile"
+              "deploy"
+          )
+
+          Write-Host ""
+          Write-Host "=================================================="
+          Write-Host "Ant command arguments"
+          Write-Host "=================================================="
+
+          foreach ($argument in $antArguments) {
+              Write-Host "[$argument]"
+          }
+
+          Write-Host ""
+          Write-Host "=================================================="
+          Write-Host "Executing Ant"
+          Write-Host "=================================================="
+
+          & $antExecutable @antArguments
 
 
           if ($LASTEXITCODE -ne 0) {
@@ -903,4 +935,3 @@ jobs:
           Write-Host "[$env:TARGET_ISGROUP_ALIAS]"
 
           exit 0
-
