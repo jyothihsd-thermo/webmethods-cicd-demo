@@ -137,7 +137,7 @@ jobs:
       CONFIG_SELECTIVE_SOURCE_DIR: C:/ibm-devops/cicd/process/GitCheckout/SelectiveConfig
       CONFIG_EMPTY_SOURCE_DIR: C:/ibm-devops/cicd/process/GitCheckout/ConfigEmpty
       ABE_SOURCE_DIR: C:/ibm-devops/cicd/process/Build/ABE_Source
-      BUILD_OUTPUT_DIR: C:/ibm-devops/cicd/process/Build/buildDeployOutput/output1/${{ inputs.projectName }}
+      BUILD_OUTPUT_DIR: C:/ibm-devops/cicd/process/Build/buildDeployOutput/output/${{ inputs.projectName }}
 
       BUILD_BACKUP_DIR: C:/ibm-devops/cicd/process/Build/buildsBackup
 
