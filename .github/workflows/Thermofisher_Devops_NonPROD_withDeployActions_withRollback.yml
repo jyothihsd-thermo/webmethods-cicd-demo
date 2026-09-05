@@ -694,7 +694,7 @@ jobs:
               Write-Host "If the new deployment fails, automatic rollback will not be attempted."
           }
           else {
-              $rollbackPath = Join-Path "C:buildsBackup" $rollbackBuild
+              $rollbackPath = Join-Path "C:/buildsBackup" $rollbackBuild
 
               Write-Host "Previous successful build : [$rollbackBuild]"
               Write-Host "Previous build path       : [$rollbackPath]"
