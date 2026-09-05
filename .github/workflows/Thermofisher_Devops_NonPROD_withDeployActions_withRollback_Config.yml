@@ -1,4 +1,4 @@
-name: Thermofisher_Devops_NonPROD_withDeployActions_withRollback_Config
+name: Thermofisher_Devops_NonPROD_withDeployActions_Config
 
 on:
   workflow_dispatch:
@@ -97,7 +97,7 @@ on:
 
 jobs:
 
-  Thermofisher_Devops_NonPROD_withDeployActions_withRollback_Config:
+  Thermofisher_Devops_NonPROD_withDeployActions_Config:
 
     runs-on:
       - self-hosted
@@ -130,8 +130,10 @@ jobs:
 
       SELECTIVE_SOURCE_DIR: C:/SoftwareAG/tools/CheckoutSelective
 
-      CONFIG_SELECTIVE_SOURCE_DIR: C:/SoftwareAG/tools/ConfigSelective
+      CONFIG_SELECTIVE_SOURCE_DIR: C:/SoftwareAG/tools/SelectiveConfig
       CONFIG_EMPTY_SOURCE_DIR: C:/SoftwareAG/tools/ConfigEmpty
+      ABE_SOURCE_DIR: C:/SoftwareAG/tools/ABE_Source
+      BUILD_OUTPUT_DIR: C:/buildDeployOutput/output1/${{ inputs.projectName }}
 
       # Persistent deployment state used for automatic rollback.
       DEPLOYMENT_STATE_DIR: C:/buildsBackup/deployment-state
@@ -613,18 +615,14 @@ jobs:
           Write-Host "Config Deployment  : [$env:CONFIG_DEPLOYMENT]"
           Write-Host "Config Files       : [$env:CONFIG_FILES]"
 
+          $targetEnvironment = $env:TARGET_ENVIRONMENT.Trim().ToLower()
+
           $environmentConfigDir = Join-Path `
-              "$env:CHECKOUT_DIR/is/configurations" `
-              $env:TARGET_ENVIRONMENT
+              "$env:CHECKOUT_DIR/is/config" `
+              $targetEnvironment
 
-          Write-Host "Environment config directory:"
-          Write-Host "[$environmentConfigDir]"
-
-          if (-not (Test-Path $environmentConfigDir -PathType Container)) {
-              Write-Error `
-                  "Environment configuration directory does not exist: $environmentConfigDir"
-              exit 1
-          }
+          Write-Host "Normalized target environment : [$targetEnvironment]"
+          Write-Host "Environment config directory : [$environmentConfigDir]"
 
           # --------------------------------------------------------
           # NONE
@@ -660,6 +658,12 @@ jobs:
               Write-Host ""
               Write-Host "ALL configuration deployment selected."
 
+              if (-not (Test-Path $environmentConfigDir -PathType Container)) {
+                  Write-Error `
+                      "Environment configuration directory does not exist: $environmentConfigDir"
+                  exit 1
+              }
+
               $configFilesFound = Get-ChildItem `
                   -Path $environmentConfigDir `
                   -Filter "*.cnf" `
@@ -687,6 +691,12 @@ jobs:
 
               Write-Host ""
               Write-Host "SELECTIVE configuration deployment selected."
+
+              if (-not (Test-Path $environmentConfigDir -PathType Container)) {
+                  Write-Error `
+                      "Environment configuration directory does not exist: $environmentConfigDir"
+                  exit 1
+              }
 
               if (Test-Path $env:CONFIG_SELECTIVE_SOURCE_DIR) {
                   Remove-Item `
@@ -882,7 +892,85 @@ jobs:
 
 
       # ============================================================
-      # 7. Verify ABE / Ant Installation
+      # 7. Prepare ABE Source Root
+      #
+      # ABE consumes one source root containing sibling packages
+      # and config directories. The Git repository is transformed
+      # into that structure here.
+      # ============================================================
+
+      - name: Prepare ABE Source Root
+        if: ${{ inputs.action != 'Deploy' }}
+        shell: powershell
+        run: |
+
+          Write-Host "=================================================="
+          Write-Host "Preparing ABE source root"
+          Write-Host "=================================================="
+
+          $abeSourceRoot = $env:ABE_SOURCE_DIR
+          $abePackagesDir = Join-Path $abeSourceRoot "packages"
+          $abeConfigDir = Join-Path $abeSourceRoot "config"
+
+          Write-Host "ABE source root : [$abeSourceRoot]"
+          Write-Host "Package source  : [$env:BUILD_SOURCE_DIR]"
+          Write-Host "Config source   : [$env:CONFIG_SOURCE_DIR]"
+
+          if (Test-Path $abeSourceRoot) {
+              Remove-Item $abeSourceRoot -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $abePackagesDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $abeConfigDir -Force | Out-Null
+
+          # Copy prepared package source into ABE_Source/packages.
+          robocopy `
+              "$env:BUILD_SOURCE_DIR" `
+              "$abePackagesDir" `
+              /E
+
+          $packageCopyExitCode = $LASTEXITCODE
+          Write-Host "Package robocopy exit code: [$packageCopyExitCode]"
+
+          if ($packageCopyExitCode -ge 8) {
+              Write-Error "Failed to prepare ABE package source. Robocopy exit code: $packageCopyExitCode"
+              exit 1
+          }
+
+          # Copy the selected configuration source into ABE_Source/config.
+          if ($env:CONFIG_DEPLOYMENT -ne "NONE") {
+
+              robocopy `
+                  "$env:CONFIG_SOURCE_DIR" `
+                  "$abeConfigDir" `
+                  /E
+
+              $configCopyExitCode = $LASTEXITCODE
+              Write-Host "Config robocopy exit code: [$configCopyExitCode]"
+
+              if ($configCopyExitCode -ge 8) {
+                  Write-Error "Failed to prepare ABE configuration source. Robocopy exit code: $configCopyExitCode"
+                  exit 1
+              }
+          }
+          else {
+              Write-Host "Configuration deployment is NONE. ABE config directory will remain empty."
+          }
+
+          Write-Host ""
+          Write-Host "ABE source root prepared:"
+          Get-ChildItem $abeSourceRoot -Recurse |
+              Select-Object FullName, Length |
+              Format-Table -AutoSize
+
+          "ABE_SOURCE_DIR=$abeSourceRoot" |
+              Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+          exit 0
+
+
+      # ============================================================
+      # 8. Verify ABE / Ant Installation
       # ============================================================
 
       - name: Verify ABE and Ant Installation
@@ -1022,8 +1110,7 @@ jobs:
 
           Write-Host "SAG_HOME         = [$env:SAG_HOME]"
           Write-Host "SAG_CI_HOME      = [$env:CICD_HOME/cicd/scripts/build-and-deploy/setup]"
-          Write-Host "SOURCE_DIR       = [$env:BUILD_SOURCE_DIR]"
-          Write-Host "configSourceDir  = [$env:CONFIG_SOURCE_DIR]"
+          Write-Host "ABE_SOURCE_DIR   = [$env:ABE_SOURCE_DIR]"
           Write-Host "targetEnv        = [$env:TARGET_ENVIRONMENT]"
           Write-Host "buildNumber      = [$env:MAIN_BUILDNUMBER]"
           Write-Host "projectName      = [$env:PROJECT_NAME]"
@@ -1034,8 +1121,7 @@ jobs:
           & $antExecutable `
               ("-DSAGHome={0}" -f $env:SAG_HOME) `
               ("-DSAG_CI_HOME={0}/cicd/scripts/build-and-deploy/setup" -f $env:CICD_HOME) `
-              ("-DSOURCE_DIR={0}" -f $env:BUILD_SOURCE_DIR) `
-              ("-DconfigSourceDir={0}" -f $env:CONFIG_SOURCE_DIR) `
+              ("-Dbuild.source.dir={0}" -f $env:ABE_SOURCE_DIR) `
               ("-DtargetEnv={0}" -f $env:TARGET_ENVIRONMENT) `
               ("-DbuildNumber={0}" -f $env:MAIN_BUILDNUMBER) `
               ("-DprojectName={0}" -f $env:PROJECT_NAME) `
@@ -1054,6 +1140,29 @@ jobs:
 
           Write-Host ""
           Write-Host "ABE build completed successfully."
+
+          if ($env:CONFIG_DEPLOYMENT -ne "NONE") {
+
+              $configurationZip = Join-Path $env:BUILD_OUTPUT_DIR "IS/isconfiguration.zip"
+              $configurationAcDL = Join-Path $env:BUILD_OUTPUT_DIR "IS/isconfiguration.acdl"
+
+              Write-Host ""
+              Write-Host "Checking ABE configuration artifacts:"
+              Write-Host "[$configurationZip]"
+              Write-Host "[$configurationAcDL]"
+
+              if (-not (Test-Path $configurationZip -PathType Leaf)) {
+                  Write-Error "ABE did not create isconfiguration.zip: $configurationZip"
+                  exit 1
+              }
+
+              if (-not (Test-Path $configurationAcDL -PathType Leaf)) {
+                  Write-Error "ABE did not create isconfiguration.acdl: $configurationAcDL"
+                  exit 1
+              }
+
+              Write-Host "Administrative configuration artifacts created successfully."
+          }
 
           exit 0
 
